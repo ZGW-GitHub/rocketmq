@@ -561,7 +561,7 @@ public class DefaultMQProducerImpl implements MQProducerInner {
         long beginTimestampPrev = beginTimestampFirst;
         long endTimestamp = beginTimestampFirst;
         
-        // 获取 Topic 路由信息
+        // 获取 TopicPublishInfo ：包含了 Topic 的基本信息
         TopicPublishInfo topicPublishInfo = this.tryToFindTopicPublishInfo(msg.getTopic());
         if (topicPublishInfo == null || !topicPublishInfo.ok()) {
             // 校验 Namesrv 是否存在
@@ -585,7 +585,7 @@ public class DefaultMQProducerImpl implements MQProducerInner {
         // 存储每次发送消息所选择的 Broker 名
         String[] brokersSent = new String[timesTotal];
         
-        // 循环，直到成功或达到最大次数
+        // 循环调用，直到成功或达到最大次数
         for (; times < timesTotal; times++) {
             String lastBrokerName = null == mq ? null : mq.getBrokerName();
             
@@ -712,20 +712,27 @@ public class DefaultMQProducerImpl implements MQProducerInner {
     }
 
     private TopicPublishInfo tryToFindTopicPublishInfo(final String topic) {
+        // 从缓存中获取 TopicPublishInfo
         TopicPublishInfo topicPublishInfo = this.topicPublishInfoTable.get(topic);
         if (null == topicPublishInfo || !topicPublishInfo.ok()) {
+            // 当无可用 TopicPublishInfo 时，从 Namesrv 中获取
             this.topicPublishInfoTable.putIfAbsent(topic, new TopicPublishInfo());
             this.mQClientFactory.updateTopicRouteInfoFromNameServer(topic);
             topicPublishInfo = this.topicPublishInfoTable.get(topic);
         }
 
+        // 当获取到的 TopicPublishInfo 可用时，返回
         if (topicPublishInfo.isHaveTopicRouterInfo() || topicPublishInfo.ok()) {
             return topicPublishInfo;
-        } else {
-            this.mQClientFactory.updateTopicRouteInfoFromNameServer(topic, true, this.defaultMQProducer);
-            topicPublishInfo = this.topicPublishInfoTable.get(topic);
-            return topicPublishInfo;
         }
+
+        /**
+         * 使用{@link DefaultMQProducer#createTopicKey} 对应的 TopicPublishInfo 。
+         * 用于 TopicPublishInfo 不存在 && Broker 支持自动创建 Topic
+         */
+        this.mQClientFactory.updateTopicRouteInfoFromNameServer(topic, true, this.defaultMQProducer);
+        topicPublishInfo = this.topicPublishInfoTable.get(topic);
+        return topicPublishInfo;
     }
 
     private SendResult sendKernelImpl(final Message msg,
