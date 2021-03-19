@@ -542,165 +542,197 @@ public class DefaultMQProducerImpl implements MQProducerInner {
 
     }
 
+    // TODO point : 发送消息
     private SendResult sendDefaultImpl(
         Message msg,
         final CommunicationMode communicationMode,
         final SendCallback sendCallback,
         final long timeout
     ) throws MQClientException, RemotingException, MQBrokerException, InterruptedException {
+        // 校验 Producer 是否处于运行状态
         this.makeSureStateOK();
+        // 校验消息格式
         Validators.checkMessage(msg, this.defaultMQProducer);
+        
+        // 调用编号：用于下面的日志打印，标记为同一次发送消息
         final long invokeID = random.nextLong();
+        
         long beginTimestampFirst = System.currentTimeMillis();
         long beginTimestampPrev = beginTimestampFirst;
         long endTimestamp = beginTimestampFirst;
+        
+        // 获取 TopicPublishInfo ：包含了 Topic 的基本信息
         TopicPublishInfo topicPublishInfo = this.tryToFindTopicPublishInfo(msg.getTopic());
-        if (topicPublishInfo != null && topicPublishInfo.ok()) {
-            boolean callTimeout = false;
-            MessageQueue mq = null;
-            Exception exception = null;
-            SendResult sendResult = null;
-            int timesTotal = communicationMode == CommunicationMode.SYNC ? 1 + this.defaultMQProducer.getRetryTimesWhenSendFailed() : 1;
-            int times = 0;
-            String[] brokersSent = new String[timesTotal];
-            for (; times < timesTotal; times++) {
-                String lastBrokerName = null == mq ? null : mq.getBrokerName();
-                MessageQueue mqSelected = this.selectOneMessageQueue(topicPublishInfo, lastBrokerName);
-                if (mqSelected != null) {
-                    mq = mqSelected;
-                    brokersSent[times] = mq.getBrokerName();
-                    try {
-                        beginTimestampPrev = System.currentTimeMillis();
-                        if (times > 0) {
-                            //Reset topic with namespace during resend.
-                            msg.setTopic(this.defaultMQProducer.withNamespace(msg.getTopic()));
-                        }
-                        long costTime = beginTimestampPrev - beginTimestampFirst;
-                        if (timeout < costTime) {
-                            callTimeout = true;
-                            break;
-                        }
+        if (topicPublishInfo == null || !topicPublishInfo.ok()) {
+            // 校验 Namesrv 是否存在
+            validateNameServerSetting();
 
-                        sendResult = this.sendKernelImpl(msg, mq, communicationMode, sendCallback, topicPublishInfo, timeout - costTime);
-                        endTimestamp = System.currentTimeMillis();
-                        this.updateFaultItem(mq.getBrokerName(), endTimestamp - beginTimestampPrev, false);
-                        switch (communicationMode) {
-                            case ASYNC:
-                                return null;
-                            case ONEWAY:
-                                return null;
-                            case SYNC:
-                                if (sendResult.getSendStatus() != SendStatus.SEND_OK) {
-                                    if (this.defaultMQProducer.isRetryAnotherBrokerWhenNotStoreOK()) {
-                                        continue;
-                                    }
-                                }
-
-                                return sendResult;
-                            default:
-                                break;
-                        }
-                    } catch (RemotingException e) {
-                        endTimestamp = System.currentTimeMillis();
-                        this.updateFaultItem(mq.getBrokerName(), endTimestamp - beginTimestampPrev, true);
-                        log.warn(String.format("sendKernelImpl exception, resend at once, InvokeID: %s, RT: %sms, Broker: %s", invokeID, endTimestamp - beginTimestampPrev, mq), e);
-                        log.warn(msg.toString());
-                        exception = e;
-                        continue;
-                    } catch (MQClientException e) {
-                        endTimestamp = System.currentTimeMillis();
-                        this.updateFaultItem(mq.getBrokerName(), endTimestamp - beginTimestampPrev, true);
-                        log.warn(String.format("sendKernelImpl exception, resend at once, InvokeID: %s, RT: %sms, Broker: %s", invokeID, endTimestamp - beginTimestampPrev, mq), e);
-                        log.warn(msg.toString());
-                        exception = e;
-                        continue;
-                    } catch (MQBrokerException e) {
-                        endTimestamp = System.currentTimeMillis();
-                        this.updateFaultItem(mq.getBrokerName(), endTimestamp - beginTimestampPrev, true);
-                        log.warn(String.format("sendKernelImpl exception, resend at once, InvokeID: %s, RT: %sms, Broker: %s", invokeID, endTimestamp - beginTimestampPrev, mq), e);
-                        log.warn(msg.toString());
-                        exception = e;
-                        switch (e.getResponseCode()) {
-                            case ResponseCode.TOPIC_NOT_EXIST:
-                            case ResponseCode.SERVICE_NOT_AVAILABLE:
-                            case ResponseCode.SYSTEM_ERROR:
-                            case ResponseCode.NO_PERMISSION:
-                            case ResponseCode.NO_BUYER_ID:
-                            case ResponseCode.NOT_IN_CURRENT_UNIT:
-                                continue;
-                            default:
-                                if (sendResult != null) {
-                                    return sendResult;
-                                }
-
-                                throw e;
-                        }
-                    } catch (InterruptedException e) {
-                        endTimestamp = System.currentTimeMillis();
-                        this.updateFaultItem(mq.getBrokerName(), endTimestamp - beginTimestampPrev, false);
-                        log.warn(String.format("sendKernelImpl exception, throw exception, InvokeID: %s, RT: %sms, Broker: %s", invokeID, endTimestamp - beginTimestampPrev, mq), e);
-                        log.warn(msg.toString());
-
-                        log.warn("sendKernelImpl exception", e);
-                        log.warn(msg.toString());
-                        throw e;
-                    }
-                } else {
+            // 消息路由找不到异常
+            throw new MQClientException("No route info of this topic: " + msg.getTopic() + FAQUrl.suggestTodo(FAQUrl.NO_TOPIC_ROUTE_INFO),
+                    null).setResponseCode(ClientErrorCode.NOT_FOUND_TOPIC_EXCEPTION);
+        }
+        
+        boolean callTimeout = false;
+        MessageQueue mq = null; // 消息最终要发送到的队列
+        Exception exception = null;
+        SendResult sendResult = null; // 最后一次发送的结果
+        
+        // 获取发送次数（同步发送为：1+重试次数 ；其它发送方式为：1次）
+        int timesTotal = communicationMode == CommunicationMode.SYNC ? 1 + this.defaultMQProducer.getRetryTimesWhenSendFailed() : 1;
+        
+        // 记录第几次发送
+        int times = 0;
+        // 存储每次发送消息所选择的 Broker 名
+        String[] brokersSent = new String[timesTotal];
+        
+        // 循环调用，直到成功或达到最大次数
+        for (; times < timesTotal; times++) {
+            String lastBrokerName = null == mq ? null : mq.getBrokerName();
+            
+            // 选择消息要发送到的队列
+            MessageQueue mqSelected = this.selectOneMessageQueue(topicPublishInfo, lastBrokerName);
+            if (mqSelected == null) {
+                break;
+            }
+            
+            mq = mqSelected;
+            brokersSent[times] = mq.getBrokerName();
+            
+            try {
+                beginTimestampPrev = System.currentTimeMillis();
+                if (times > 0) {
+                    // Reset topic with namespace during resend.
+                    // TODO 待办 : 在重发期间使用命名空间重置主题
+                    msg.setTopic(this.defaultMQProducer.withNamespace(msg.getTopic()));
+                }
+                long costTime = beginTimestampPrev - beginTimestampFirst;
+                if (timeout < costTime) {
+                    callTimeout = true;
+                    // 若已超时，不再进行发送或重试，退出循环
                     break;
                 }
+
+                // 调用发送消息核心方法
+                sendResult = this.sendKernelImpl(msg, mq, communicationMode, sendCallback, topicPublishInfo, timeout - costTime);
+                
+                endTimestamp = System.currentTimeMillis();
+                // 更新 Broker 可用性信息
+                this.updateFaultItem(mq.getBrokerName(), endTimestamp - beginTimestampPrev, false);
+                
+                switch (communicationMode) {
+                    case ASYNC:
+                    case ONEWAY:
+                        return null;
+                    case SYNC:
+                        if (sendResult.getSendStatus() != SendStatus.SEND_OK) {
+                            if (this.defaultMQProducer.isRetryAnotherBrokerWhenNotStoreOK()) {
+                                // 同步发送成功但存储有问题 && 配置了存储异常时重新发送开关 时，进行重试
+                                continue;
+                            }
+                        }
+                        return sendResult;
+                    default:
+                        break;
+                }
+            } catch (RemotingException | MQClientException e) { // 打印异常，更新 Broker 可用性信息，并继续循环
+                // TODO mark : 当抛出 RemotingException 时，若进行消息发送失败重试，则可能导致消息发送重复。
+                // 例如：发送消息超时(RemotingTimeoutException)，实际上Broker接收到消息并处理成功。因此，Consumer在消费时，需要保证幂等性。
+                endTimestamp = System.currentTimeMillis();
+                this.updateFaultItem(mq.getBrokerName(), endTimestamp - beginTimestampPrev, true);
+                log.warn(String.format("sendKernelImpl exception, resend at once, InvokeID: %s, RT: %sms, Broker: %s", invokeID, endTimestamp - beginTimestampPrev, mq), e);
+                log.warn(msg.toString());
+                exception = e;
+            } catch (MQBrokerException e) { // 打印异常，更新 Broker 可用性信息，针对部分异常直接返回结束循环，其它异常继续循环
+                endTimestamp = System.currentTimeMillis();
+                this.updateFaultItem(mq.getBrokerName(), endTimestamp - beginTimestampPrev, true);
+                log.warn(String.format("sendKernelImpl exception, resend at once, InvokeID: %s, RT: %sms, Broker: %s", invokeID, endTimestamp - beginTimestampPrev, mq), e);
+                log.warn(msg.toString());
+                exception = e;
+                
+                switch (e.getResponseCode()) {
+                    // 若发生以下异常，进行重试发送
+                    case ResponseCode.TOPIC_NOT_EXIST:
+                    case ResponseCode.SERVICE_NOT_AVAILABLE:
+                    case ResponseCode.SYSTEM_ERROR:
+                    case ResponseCode.NO_PERMISSION:
+                    case ResponseCode.NO_BUYER_ID:
+                    case ResponseCode.NOT_IN_CURRENT_UNIT:
+                        continue;
+                    default:
+                        // 若非上面的异常：若有发送结果，返回结果；否则抛异常结束。
+                        if (sendResult != null) {
+                            return sendResult;
+                        }
+
+                        throw e;
+                }
+            } catch (InterruptedException e) { // 发生中断异常，更新 Broker 可用性信息，并抛异常结束
+                endTimestamp = System.currentTimeMillis();
+                this.updateFaultItem(mq.getBrokerName(), endTimestamp - beginTimestampPrev, false);
+                log.warn(String.format("sendKernelImpl exception, throw exception, InvokeID: %s, RT: %sms, Broker: %s", invokeID, endTimestamp - beginTimestampPrev, mq), e);
+                log.warn(msg.toString());
+                log.warn("sendKernelImpl exception", e);
+                log.warn(msg.toString());
+                
+                throw e;
             }
-
-            if (sendResult != null) {
-                return sendResult;
-            }
-
-            String info = String.format("Send [%d] times, still failed, cost [%d]ms, Topic: %s, BrokersSent: %s",
-                times,
-                System.currentTimeMillis() - beginTimestampFirst,
-                msg.getTopic(),
-                Arrays.toString(brokersSent));
-
-            info += FAQUrl.suggestTodo(FAQUrl.SEND_MSG_FAILED);
-
-            MQClientException mqClientException = new MQClientException(info, exception);
-            if (callTimeout) {
-                throw new RemotingTooMuchRequestException("sendDefaultImpl call timeout");
-            }
-
-            if (exception instanceof MQBrokerException) {
-                mqClientException.setResponseCode(((MQBrokerException) exception).getResponseCode());
-            } else if (exception instanceof RemotingConnectException) {
-                mqClientException.setResponseCode(ClientErrorCode.CONNECT_BROKER_EXCEPTION);
-            } else if (exception instanceof RemotingTimeoutException) {
-                mqClientException.setResponseCode(ClientErrorCode.ACCESS_BROKER_TIMEOUT);
-            } else if (exception instanceof MQClientException) {
-                mqClientException.setResponseCode(ClientErrorCode.BROKER_NOT_EXIST_EXCEPTION);
-            }
-
-            throw mqClientException;
         }
 
-        validateNameServerSetting();
+        // 返回发送结果
+        if (sendResult != null) {
+            return sendResult;
+        }
 
-        throw new MQClientException("No route info of this topic: " + msg.getTopic() + FAQUrl.suggestTodo(FAQUrl.NO_TOPIC_ROUTE_INFO),
-            null).setResponseCode(ClientErrorCode.NOT_FOUND_TOPIC_EXCEPTION);
+        // 根据不同情况，抛出不同异常
+        String info = String.format("Send [%d] times, still failed, cost [%d]ms, Topic: %s, BrokersSent: %s",
+            times,
+            System.currentTimeMillis() - beginTimestampFirst,
+            msg.getTopic(),
+            Arrays.toString(brokersSent));
+
+        info += FAQUrl.suggestTodo(FAQUrl.SEND_MSG_FAILED);
+
+        MQClientException mqClientException = new MQClientException(info, exception);
+        if (callTimeout) {
+            throw new RemotingTooMuchRequestException("sendDefaultImpl call timeout");
+        }
+
+        if (exception instanceof MQBrokerException) {
+            mqClientException.setResponseCode(((MQBrokerException) exception).getResponseCode());
+        } else if (exception instanceof RemotingConnectException) {
+            mqClientException.setResponseCode(ClientErrorCode.CONNECT_BROKER_EXCEPTION);
+        } else if (exception instanceof RemotingTimeoutException) {
+            mqClientException.setResponseCode(ClientErrorCode.ACCESS_BROKER_TIMEOUT);
+        } else if (exception instanceof MQClientException) {
+            mqClientException.setResponseCode(ClientErrorCode.BROKER_NOT_EXIST_EXCEPTION);
+        }
+
+        throw mqClientException;
+    
     }
 
     private TopicPublishInfo tryToFindTopicPublishInfo(final String topic) {
+        // 从缓存中获取 TopicPublishInfo
         TopicPublishInfo topicPublishInfo = this.topicPublishInfoTable.get(topic);
         if (null == topicPublishInfo || !topicPublishInfo.ok()) {
+            // 当无可用 TopicPublishInfo 时，从 Namesrv 中获取
             this.topicPublishInfoTable.putIfAbsent(topic, new TopicPublishInfo());
             this.mQClientFactory.updateTopicRouteInfoFromNameServer(topic);
             topicPublishInfo = this.topicPublishInfoTable.get(topic);
         }
 
+        // 当获取到的 TopicPublishInfo 可用时，返回
         if (topicPublishInfo.isHaveTopicRouterInfo() || topicPublishInfo.ok()) {
             return topicPublishInfo;
-        } else {
-            this.mQClientFactory.updateTopicRouteInfoFromNameServer(topic, true, this.defaultMQProducer);
-            topicPublishInfo = this.topicPublishInfoTable.get(topic);
-            return topicPublishInfo;
         }
+
+        /**
+         * 使用{@link DefaultMQProducer#createTopicKey} 对应的 TopicPublishInfo 。
+         * 用于 TopicPublishInfo 不存在 && Broker 支持自动创建 Topic
+         */
+        this.mQClientFactory.updateTopicRouteInfoFromNameServer(topic, true, this.defaultMQProducer);
+        topicPublishInfo = this.topicPublishInfoTable.get(topic);
+        return topicPublishInfo;
     }
 
     private SendResult sendKernelImpl(final Message msg,

@@ -67,9 +67,12 @@ public class TopicPublishInfo {
     }
 
     public MessageQueue selectOneMessageQueue(final String lastBrokerName) {
+        // 若 lastBrokerName == null 说明是第一次发送，还未发生重试
         if (lastBrokerName == null) {
+            // 从 Topic 的队列中轮询取一个出来
             return selectOneMessageQueue();
         } else {
+            // 过滤掉 lastBrokerName Broker 的队列
             for (int i = 0; i < this.messageQueueList.size(); i++) {
                 int index = this.sendWhichQueue.getAndIncrement();
                 int pos = Math.abs(index) % this.messageQueueList.size();
@@ -80,10 +83,16 @@ public class TopicPublishInfo {
                     return mq;
                 }
             }
+
+            // 从 Topic 的队列中轮询取一个出来
             return selectOneMessageQueue();
         }
     }
 
+    /**
+     * 从 Topic 的队列中轮询取一个出来
+     * @return MessageQueue
+     */
     public MessageQueue selectOneMessageQueue() {
         int index = this.sendWhichQueue.getAndIncrement();
         int pos = Math.abs(index) % this.messageQueueList.size();
