@@ -542,7 +542,7 @@ public class DefaultMQProducerImpl implements MQProducerInner {
 
     }
 
-    // TODO point: 发送消息
+    // TODO point：发送消息
     private SendResult sendDefaultImpl(
         Message msg,
         final CommunicationMode communicationMode,
