@@ -542,7 +542,7 @@ public class DefaultMQProducerImpl implements MQProducerInner {
 
     }
 
-    // TODO point : 发送消息
+    // TODO point: 发送消息
     private SendResult sendDefaultImpl(
         Message msg,
         final CommunicationMode communicationMode,
@@ -602,7 +602,7 @@ public class DefaultMQProducerImpl implements MQProducerInner {
                 beginTimestampPrev = System.currentTimeMillis();
                 if (times > 0) {
                     // Reset topic with namespace during resend.
-                    // TODO 待办 : 在重发期间使用命名空间重置主题
+                    // TODO 待办: 在重发期间使用命名空间重置主题
                     msg.setTopic(this.defaultMQProducer.withNamespace(msg.getTopic()));
                 }
                 long costTime = beginTimestampPrev - beginTimestampFirst;
@@ -635,7 +635,7 @@ public class DefaultMQProducerImpl implements MQProducerInner {
                         break;
                 }
             } catch (RemotingException | MQClientException e) { // 打印异常，更新 Broker 可用性信息，并继续循环
-                // TODO mark : 当抛出 RemotingException 时，若进行消息发送失败重试，则可能导致消息发送重复。
+                // TODO mark: 当抛出 RemotingException 时，若进行消息发送失败重试，则可能导致消息发送重复。
                 // 例如：发送消息超时(RemotingTimeoutException)，实际上Broker接收到消息并处理成功。因此，Consumer在消费时，需要保证幂等性。
                 endTimestamp = System.currentTimeMillis();
                 this.updateFaultItem(mq.getBrokerName(), endTimestamp - beginTimestampPrev, true);
@@ -735,13 +735,19 @@ public class DefaultMQProducerImpl implements MQProducerInner {
         return topicPublishInfo;
     }
 
+    /**
+     * 发送消息核心方法。该方法真正的发起网络请求，发送消息给 Broker 。
+     */
     private SendResult sendKernelImpl(final Message msg,
         final MessageQueue mq,
         final CommunicationMode communicationMode,
         final SendCallback sendCallback,
         final TopicPublishInfo topicPublishInfo,
         final long timeout) throws MQClientException, RemotingException, MQBrokerException, InterruptedException {
+        
         long beginStartTime = System.currentTimeMillis();
+        
+        // 获取 Broker 地址
         String brokerAddr = this.mQClientFactory.findBrokerAddressInPublish(mq.getBrokerName());
         if (null == brokerAddr) {
             tryToFindTopicPublishInfo(mq.getTopic());
@@ -750,21 +756,26 @@ public class DefaultMQProducerImpl implements MQProducerInner {
 
         SendMessageContext context = null;
         if (brokerAddr != null) {
+            // TODO 待办：是否使用 Broker vip 通道。Broker 会开启两个端口对外服务。
             brokerAddr = MixAll.brokerVIPChannel(this.defaultMQProducer.isSendMessageWithVIPChannel(), brokerAddr);
 
+            // 记录消息内容。下面逻辑可能改变消息内容，例如消息压缩。
             byte[] prevBody = msg.getBody();
             try {
-                //for MessageBatch,ID has been set in the generating process
+                // for MessageBatch,ID has been set in the generating process
+                // 设置唯一编号
                 if (!(msg instanceof MessageBatch)) {
                     MessageClientIDSetter.setUniqID(msg);
                 }
 
+                // TODO 待办：Namespace 是什么
                 boolean topicWithNamespace = false;
                 if (null != this.mQClientFactory.getClientConfig().getNamespace()) {
                     msg.setInstanceId(this.mQClientFactory.getClientConfig().getNamespace());
                     topicWithNamespace = true;
                 }
 
+                // 消息压缩
                 int sysFlag = 0;
                 boolean msgBodyCompressed = false;
                 if (this.tryToCompressMessage(msg)) {
@@ -772,11 +783,13 @@ public class DefaultMQProducerImpl implements MQProducerInner {
                     msgBodyCompressed = true;
                 }
 
+                // 事务
                 final String tranMsg = msg.getProperty(MessageConst.PROPERTY_TRANSACTION_PREPARED);
-                if (tranMsg != null && Boolean.parseBoolean(tranMsg)) {
+                if (Boolean.parseBoolean(tranMsg)) {
                     sysFlag |= MessageSysFlag.TRANSACTION_PREPARED_TYPE;
                 }
 
+                // hook：发送消息校验
                 if (hasCheckForbiddenHook()) {
                     CheckForbiddenContext checkForbiddenContext = new CheckForbiddenContext();
                     checkForbiddenContext.setNameSrvAddr(this.defaultMQProducer.getNamesrvAddr());
@@ -789,6 +802,7 @@ public class DefaultMQProducerImpl implements MQProducerInner {
                     this.executeCheckForbiddenHook(checkForbiddenContext);
                 }
 
+                // hook：发送消息前逻辑
                 if (this.hasSendMessageHook()) {
                     context = new SendMessageContext();
                     context.setProducer(this);
@@ -810,6 +824,7 @@ public class DefaultMQProducerImpl implements MQProducerInner {
                     this.executeSendMessageHookBefore(context);
                 }
 
+                // 构建发送消息请求：SendMessageRequestHeader
                 SendMessageRequestHeader requestHeader = new SendMessageRequestHeader();
                 requestHeader.setProducerGroup(this.defaultMQProducer.getProducerGroup());
                 requestHeader.setTopic(msg.getTopic());
@@ -837,6 +852,7 @@ public class DefaultMQProducerImpl implements MQProducerInner {
                     }
                 }
 
+                // 发送消息
                 SendResult sendResult = null;
                 switch (communicationMode) {
                     case ASYNC:
@@ -898,11 +914,13 @@ public class DefaultMQProducerImpl implements MQProducerInner {
                         break;
                 }
 
+                // hook：发送消息后逻辑
                 if (this.hasSendMessageHook()) {
                     context.setSendResult(sendResult);
                     this.executeSendMessageHookAfter(context);
                 }
 
+                // 返回发送结果
                 return sendResult;
             } catch (RemotingException e) {
                 if (this.hasSendMessageHook()) {
@@ -928,6 +946,7 @@ public class DefaultMQProducerImpl implements MQProducerInner {
             }
         }
 
+        // BrokerAddr 为 NULL 抛出异常
         throw new MQClientException("The broker[" + mq.getBrokerName() + "] not exist", null);
     }
 
