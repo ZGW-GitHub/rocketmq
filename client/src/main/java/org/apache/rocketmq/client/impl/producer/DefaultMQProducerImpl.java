@@ -551,7 +551,7 @@ public class DefaultMQProducerImpl implements MQProducerInner {
     ) throws MQClientException, RemotingException, MQBrokerException, InterruptedException {
         // 校验 Producer 是否处于运行状态
         this.makeSureStateOK();
-        // 校验消息格式
+        // 校验消息
         Validators.checkMessage(msg, this.defaultMQProducer);
         
         // 调用编号：用于下面的日志打印，标记为同一次发送消息
@@ -561,7 +561,7 @@ public class DefaultMQProducerImpl implements MQProducerInner {
         long beginTimestampPrev = beginTimestampFirst;
         long endTimestamp = beginTimestampFirst;
         
-        // 获取 TopicPublishInfo ：包含了 Topic 的基本信息
+        // 获取 TopicPublishInfo ：包含了 Topic 的基本信息(如：Queue 信息、Broker 信息)
         TopicPublishInfo topicPublishInfo = this.tryToFindTopicPublishInfo(msg.getTopic());
         if (topicPublishInfo == null || !topicPublishInfo.ok()) {
             // 校验 Namesrv 是否存在
@@ -715,7 +715,7 @@ public class DefaultMQProducerImpl implements MQProducerInner {
         // 从缓存中获取 TopicPublishInfo
         TopicPublishInfo topicPublishInfo = this.topicPublishInfoTable.get(topic);
         if (null == topicPublishInfo || !topicPublishInfo.ok()) {
-            // 当无可用 TopicPublishInfo 时，从 Namesrv 中获取
+            // 当缓存中无可用 TopicPublishInfo 时，从 Namesrv 中获取
             this.topicPublishInfoTable.putIfAbsent(topic, new TopicPublishInfo());
             this.mQClientFactory.updateTopicRouteInfoFromNameServer(topic);
             topicPublishInfo = this.topicPublishInfoTable.get(topic);
@@ -747,9 +747,10 @@ public class DefaultMQProducerImpl implements MQProducerInner {
         
         long beginStartTime = System.currentTimeMillis();
         
-        // 获取 Broker 地址
+        // 从缓存中获取 Broker 地址
         String brokerAddr = this.mQClientFactory.findBrokerAddressInPublish(mq.getBrokerName());
         if (null == brokerAddr) {
+            // 缓存中没有，就从 Namesrv 获取
             tryToFindTopicPublishInfo(mq.getTopic());
             brokerAddr = this.mQClientFactory.findBrokerAddressInPublish(mq.getBrokerName());
         }
@@ -778,7 +779,7 @@ public class DefaultMQProducerImpl implements MQProducerInner {
                 // 消息压缩
                 int sysFlag = 0;
                 boolean msgBodyCompressed = false;
-                if (this.tryToCompressMessage(msg)) {
+                if (this.tryToCompressMessage(msg)) { // 对消息体大小大于 4k 的消息进行压缩
                     sysFlag |= MessageSysFlag.COMPRESSED_FLAG;
                     msgBodyCompressed = true;
                 }
@@ -922,19 +923,7 @@ public class DefaultMQProducerImpl implements MQProducerInner {
 
                 // 返回发送结果
                 return sendResult;
-            } catch (RemotingException e) {
-                if (this.hasSendMessageHook()) {
-                    context.setException(e);
-                    this.executeSendMessageHookAfter(context);
-                }
-                throw e;
-            } catch (MQBrokerException e) {
-                if (this.hasSendMessageHook()) {
-                    context.setException(e);
-                    this.executeSendMessageHookAfter(context);
-                }
-                throw e;
-            } catch (InterruptedException e) {
+            } catch (RemotingException | MQBrokerException | InterruptedException e) {
                 if (this.hasSendMessageHook()) {
                     context.setException(e);
                     this.executeSendMessageHookAfter(context);
