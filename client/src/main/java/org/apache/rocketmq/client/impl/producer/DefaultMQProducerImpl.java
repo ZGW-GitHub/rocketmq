@@ -635,7 +635,7 @@ public class DefaultMQProducerImpl implements MQProducerInner {
                         break;
                 }
             } catch (RemotingException | MQClientException e) { // 打印异常，更新 Broker 可用性信息，并继续循环
-                // TODO mark: 当抛出 RemotingException 时，若进行消息发送失败重试，则可能导致消息发送重复。
+                // TODO mark：当抛出 RemotingException 时，若进行消息发送失败重试，则可能导致消息发送重复。
                 // 例如：发送消息超时(RemotingTimeoutException)，实际上Broker接收到消息并处理成功。因此，Consumer在消费时，需要保证幂等性。
                 endTimestamp = System.currentTimeMillis();
                 this.updateFaultItem(mq.getBrokerName(), endTimestamp - beginTimestampPrev, true);
