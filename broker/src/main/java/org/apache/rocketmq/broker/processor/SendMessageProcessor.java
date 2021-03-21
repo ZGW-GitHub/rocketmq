@@ -300,7 +300,7 @@ public class SendMessageProcessor extends AbstractSendMessageProcessor implement
         CompletableFuture<PutMessageResult> putMessageResult = null;
         
         Map<String, String> origProps = MessageDecoder.string2messageProperties(requestHeader.getProperties());
-        // 校验是否允许发送事务消息
+        // 校验是否为事务消息
         String transFlag = origProps.get(MessageConst.PROPERTY_TRANSACTION_PREPARED);
         if (Boolean.parseBoolean(transFlag)) {
             if (this.brokerController.getBrokerConfig().isRejectTransactionMessage()) {
@@ -336,7 +336,7 @@ public class SendMessageProcessor extends AbstractSendMessageProcessor implement
                                       RemotingCommand request,
                                       MessageExt msg, TopicConfig topicConfig) {
         String newTopic = requestHeader.getTopic();
-        // TODO mark：对 RETRY 类型的消息处理。若超过最大消费次数，则 Topic 修改成 "%DLQ%" + 分组名，即：加入死信队列
+        // TODO mark：对 RETRY(重试) 类型的消息处理。若超过最大消费次数，则 Topic 修改成 "%DLQ%" + 分组名，即：加入死信队列
         if (null != newTopic && newTopic.startsWith(MixAll.RETRY_GROUP_TOPIC_PREFIX)) {
             String groupName = newTopic.substring(MixAll.RETRY_GROUP_TOPIC_PREFIX.length());
             // 获取订阅分组配置
@@ -469,9 +469,9 @@ public class SendMessageProcessor extends AbstractSendMessageProcessor implement
         }
         boolean sendOK = false;
 
-        // 处理消息发送结果，设置响应结果和提示
+        // 根据消息的存储结果，设置响应结果和提示
         switch (putMessageResult.getPutMessageStatus()) {
-            // Success
+            // 消息存储成功
             case PUT_OK:
                 sendOK = true;
                 response.setCode(ResponseCode.SUCCESS);
@@ -489,7 +489,7 @@ public class SendMessageProcessor extends AbstractSendMessageProcessor implement
                 sendOK = true;
                 break;
 
-            // Failed
+            // 消息存储失败
             case CREATE_MAPEDFILE_FAILED:
                 response.setCode(ResponseCode.SYSTEM_ERROR);
                 response.setRemark("create mapped file failed, server is busy or broken.");
@@ -521,7 +521,7 @@ public class SendMessageProcessor extends AbstractSendMessageProcessor implement
         }
 
         String owner = request.getExtFields().get(BrokerStatsManager.COMMERCIAL_OWNER);
-        // 发送成功，响应
+        // 消息存储成功
         if (sendOK) {
             // 统计
             this.brokerController.getBrokerStatsManager().incTopicPutNums(msg.getTopic(), putMessageResult.getAppendMessageResult().getMsgNum(), 1);

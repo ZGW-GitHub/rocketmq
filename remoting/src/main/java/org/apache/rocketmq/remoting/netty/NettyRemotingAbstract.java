@@ -404,6 +404,7 @@ public abstract class NettyRemotingAbstract {
         }
     }
 
+    // 消息就是在这里发送出去的
     public RemotingCommand invokeSyncImpl(final Channel channel, final RemotingCommand request,
         final long timeoutMillis)
         throws InterruptedException, RemotingSendRequestException, RemotingTimeoutException {
