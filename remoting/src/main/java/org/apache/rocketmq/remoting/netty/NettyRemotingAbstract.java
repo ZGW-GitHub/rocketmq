@@ -202,6 +202,7 @@ public abstract class NettyRemotingAbstract {
                 public void run() {
                     try {
                         doBeforeRpcHooks(RemotingHelper.parseChannelRemoteAddr(ctx.channel()), cmd);
+
                         // 请求处理完后的回调函数
                         final RemotingResponseCallback callback = new RemotingResponseCallback() {
                             @Override
@@ -212,6 +213,7 @@ public abstract class NettyRemotingAbstract {
                                         response.setOpaque(opaque);
                                         response.markResponseType();
                                         try {
+                                            // 通过 Netty 写会 response
                                             ctx.writeAndFlush(response);
                                         } catch (Throwable e) {
                                             log.error("process request over, but response failed", e);
