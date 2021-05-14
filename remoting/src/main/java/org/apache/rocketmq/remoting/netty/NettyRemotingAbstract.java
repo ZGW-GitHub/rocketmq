@@ -190,16 +190,19 @@ public abstract class NettyRemotingAbstract {
      * @param cmd request command.
      */
     public void processRequestCommand(final ChannelHandlerContext ctx, final RemotingCommand cmd) {
+        // 1、根据请求的 code 获取对应的 处理器 、线程池
         final Pair<NettyRequestProcessor, ExecutorService> matched = this.processorTable.get(cmd.getCode());
         final Pair<NettyRequestProcessor, ExecutorService> pair = null == matched ? this.defaultRequestProcessor : matched;
         final int opaque = cmd.getOpaque();
 
         if (pair != null) {
+            // 5、线程池执行的 runnable
             Runnable run = new Runnable() {
                 @Override
                 public void run() {
                     try {
                         doBeforeRpcHooks(RemotingHelper.parseChannelRemoteAddr(ctx.channel()), cmd);
+                        // 请求处理完后的回调函数
                         final RemotingResponseCallback callback = new RemotingResponseCallback() {
                             @Override
                             public void callback(RemotingCommand response) {
@@ -222,9 +225,11 @@ public abstract class NettyRemotingAbstract {
                         };
                         if (pair.getObject1() instanceof AsyncNettyRequestProcessor) {
                             AsyncNettyRequestProcessor processor = (AsyncNettyRequestProcessor)pair.getObject1();
+                            // 处理请求
                             processor.asyncProcessRequest(ctx, cmd, callback);
                         } else {
                             NettyRequestProcessor processor = pair.getObject1();
+                            // 处理请求
                             RemotingCommand response = processor.processRequest(ctx, cmd);
                             callback.callback(response);
                         }
@@ -242,6 +247,7 @@ public abstract class NettyRemotingAbstract {
                 }
             };
 
+            // 2、判断是否拒绝请求
             if (pair.getObject1().rejectRequest()) {
                 final RemotingCommand response = RemotingCommand.createResponseCommand(RemotingSysResponseCode.SYSTEM_BUSY,
                     "[REJECTREQUEST]system busy, start flow control for a while");
@@ -251,7 +257,9 @@ public abstract class NettyRemotingAbstract {
             }
 
             try {
+                // 3、将请求封装进一个自定义的 Task 类
                 final RequestTask requestTask = new RequestTask(run, ctx.channel(), cmd);
+                // 4、将请求提交给线程池
                 pair.getObject2().submit(requestTask);
             } catch (RejectedExecutionException e) {
                 if ((System.currentTimeMillis() % 10000) == 0) {
