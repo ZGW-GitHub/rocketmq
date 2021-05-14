@@ -223,11 +223,11 @@ public abstract class NettyRemotingAbstract {
                                 }
                             }
                         };
-                        if (pair.getObject1() instanceof AsyncNettyRequestProcessor) {
+                        if (pair.getObject1() instanceof AsyncNettyRequestProcessor) { // 异步
                             AsyncNettyRequestProcessor processor = (AsyncNettyRequestProcessor)pair.getObject1();
                             // 处理请求
                             processor.asyncProcessRequest(ctx, cmd, callback);
-                        } else {
+                        } else { // 同步
                             NettyRequestProcessor processor = pair.getObject1();
                             // 处理请求
                             RemotingCommand response = processor.processRequest(ctx, cmd);
