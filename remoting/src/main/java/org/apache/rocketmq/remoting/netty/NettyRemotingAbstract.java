@@ -227,11 +227,11 @@ public abstract class NettyRemotingAbstract {
                         };
                         if (pair.getObject1() instanceof AsyncNettyRequestProcessor) { // 异步
                             AsyncNettyRequestProcessor processor = (AsyncNettyRequestProcessor)pair.getObject1();
-                            // 处理请求
+                            // 使用第 1 步获取到的处理器处理请求
                             processor.asyncProcessRequest(ctx, cmd, callback);
                         } else { // 同步
                             NettyRequestProcessor processor = pair.getObject1();
-                            // 处理请求
+                            // 使用第 1 步获取到的处理器处理请求
                             RemotingCommand response = processor.processRequest(ctx, cmd);
                             callback.callback(response);
                         }
@@ -261,7 +261,7 @@ public abstract class NettyRemotingAbstract {
             try {
                 // 3、将请求封装进一个自定义的 Task 类
                 final RequestTask requestTask = new RequestTask(run, ctx.channel(), cmd);
-                // 4、将请求提交给线程池
+                // 4、将请求提交给第 1 步获取到的线程池
                 pair.getObject2().submit(requestTask);
             } catch (RejectedExecutionException e) {
                 if ((System.currentTimeMillis() % 10000) == 0) {
