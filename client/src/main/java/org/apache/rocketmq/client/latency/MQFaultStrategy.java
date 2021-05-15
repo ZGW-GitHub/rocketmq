@@ -101,7 +101,7 @@ public class MQFaultStrategy {
                     // 从 Topic 的队列中轮询取一个出来
                     final MessageQueue mq = tpInfo.selectOneMessageQueue();
                     if (notBestBroker != null) {
-                        // TODO 待办：更改 MessageQueue 的信息，为什么，有啥用
+                        // TODO zgw 待办：更改 MessageQueue 的信息，为什么，有啥用
                         mq.setBrokerName(notBestBroker);
                         mq.setQueueId(tpInfo.getSendWhichQueue().getAndIncrement() % writeQueueNums);
                     }

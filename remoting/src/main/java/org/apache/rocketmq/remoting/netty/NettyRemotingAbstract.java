@@ -305,7 +305,7 @@ public abstract class NettyRemotingAbstract {
             if (responseFuture.getInvokeCallback() != null) {
                 executeInvokeCallback(responseFuture);
             } else {
-                responseFuture.putResponse(cmd);
+                responseFuture.putResponse(cmd); // TODO zgw ：信号量、锁
                 responseFuture.release();
             }
         } else {

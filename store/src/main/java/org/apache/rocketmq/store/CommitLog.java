@@ -907,7 +907,7 @@ public class CommitLog {
 
         // 消息刷盘（同步 OR 异步），即：持久化到文件，上面插入消息实际未存储到硬盘。
         handleDiskFlush(result, putMessageResult, msg);
-        // 如果是同步Master，同步到从节点(主从同步) TODO 待办：数据同步
+        // 如果是同步Master，同步到从节点(主从同步) TODO zgw 待办：数据同步
         handleHA(result, putMessageResult, msg);
 
         return putMessageResult;
@@ -985,7 +985,7 @@ public class CommitLog {
         // Asynchronous flush
         else {
             if (!this.defaultMessageStore.getMessageStoreConfig().isTransientStorePoolEnable()) {
-                flushCommitLogService.wakeup(); // TODO mark：唤醒 commitLog 线程，进行 flush
+                flushCommitLogService.wakeup(); // TODO zgw mark：唤醒 commitLog 线程，进行 flush
             } else {
                 commitLogService.wakeup();
             }

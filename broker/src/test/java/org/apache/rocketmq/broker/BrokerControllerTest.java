@@ -53,7 +53,7 @@ public class BrokerControllerTest {
         UtilAll.deleteFile(new File(new MessageStoreConfig().getStorePathRootDir()));
     }
 
-    // TODO start：启动 Broker
+    // TODO zgw start：启动 Broker
     public static void main(String[] args) throws Exception {
         // 设置版本号
         System.setProperty(RemotingCommand.REMOTING_VERSION_KEY, Integer.toString(MQVersion.CURRENT_VERSION));

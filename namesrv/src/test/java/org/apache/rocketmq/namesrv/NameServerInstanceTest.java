@@ -46,7 +46,7 @@ public class NameServerInstanceTest {
         //maybe need to clean the file store. But we do not suggest deleting anything.
     }
 
-    // TODO start：启动 Namesrv
+    // TODO zgw start：启动 Namesrv
     public static void main(String[] args) throws Exception {
         final NamesrvConfig namesrvConfig = new NamesrvConfig();
         final NettyServerConfig nettyServerConfig = new NettyServerConfig();

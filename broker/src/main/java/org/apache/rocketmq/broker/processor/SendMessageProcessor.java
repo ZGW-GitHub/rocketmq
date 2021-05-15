@@ -65,7 +65,7 @@ public class SendMessageProcessor extends AbstractSendMessageProcessor implement
         super(brokerController);
     }
 
-    // TODO point：Broker 接收消息，处理消息请求
+    // Broker 接收消息，处理消息请求
     @Override
     public RemotingCommand processRequest(ChannelHandlerContext ctx,
                                           RemotingCommand request) throws RemotingCommandException {
@@ -88,7 +88,7 @@ public class SendMessageProcessor extends AbstractSendMessageProcessor implement
         final SendMessageContext mqtraceContext;
         switch (request.getCode()) {
             case RequestCode.CONSUMER_SEND_MSG_BACK:
-                // TODO 待办：CONSUMER_SEND_MSG_BACK
+                // TODO zgw 待办：CONSUMER_SEND_MSG_BACK
                 return this.asyncConsumerSendMsgBack(ctx, request);
             default:
                 // 解析请求
@@ -336,7 +336,7 @@ public class SendMessageProcessor extends AbstractSendMessageProcessor implement
                                       RemotingCommand request,
                                       MessageExt msg, TopicConfig topicConfig) {
         String newTopic = requestHeader.getTopic();
-        // TODO mark：对 RETRY(重试) 类型的消息处理。若超过最大消费次数，则 Topic 修改成 "%DLQ%" + 分组名，即：加入死信队列
+        // TODO zgw mark：对 RETRY(重试) 类型的消息处理。若超过最大消费次数，则 Topic 修改成 "%DLQ%" + 分组名，即：加入死信队列
         if (null != newTopic && newTopic.startsWith(MixAll.RETRY_GROUP_TOPIC_PREFIX)) {
             String groupName = newTopic.substring(MixAll.RETRY_GROUP_TOPIC_PREFIX.length());
             // 获取订阅分组配置
@@ -373,7 +373,7 @@ public class SendMessageProcessor extends AbstractSendMessageProcessor implement
             }
         }
         
-        // TODO 待办：sysFlag 是什么
+        // TODO zgw 待办：sysFlag 是什么
         int sysFlag = requestHeader.getSysFlag();
         if (TopicFilterType.MULTI_TAG == topicConfig.getTopicFilterType()) {
             sysFlag |= MessageSysFlag.MULTI_TAGS_FLAG;

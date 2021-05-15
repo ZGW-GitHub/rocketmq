@@ -91,7 +91,7 @@ public class LatencyFaultToleranceImpl implements LatencyFaultTolerance<String> 
         }
 
         if (!tmpList.isEmpty()) {
-            // 打乱 + 排序。TODO 待办：应该只能二选一。猜测 Collections.shuffle(tmpList) 去掉。
+            // 打乱 + 排序。TODO zgw 待办：应该只能二选一。猜测 Collections.shuffle(tmpList) 去掉。
             Collections.shuffle(tmpList);
             Collections.sort(tmpList);
 
