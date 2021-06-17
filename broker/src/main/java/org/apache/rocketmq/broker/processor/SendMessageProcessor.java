@@ -65,7 +65,7 @@ public class SendMessageProcessor extends AbstractSendMessageProcessor implement
         super(brokerController);
     }
 
-    // Broker 接收消息，处理消息请求
+    // Broker 处理 Producer 发送过来的消息(存储消息)
     @Override
     public RemotingCommand processRequest(ChannelHandlerContext ctx,
                                           RemotingCommand request) throws RemotingCommandException {
@@ -96,16 +96,16 @@ public class SendMessageProcessor extends AbstractSendMessageProcessor implement
                 if (requestHeader == null) {
                     return CompletableFuture.completedFuture(null);
                 }
-                // 发送请求Context。在 hook 场景下使用
+                // 根据 RequestHeader 组装 SendMessageContext
                 mqtraceContext = buildMsgContext(ctx, requestHeader);
-                // hook：处理发送消息前逻辑
+                // hook：处理存储消息前逻辑
                 this.executeSendMessageHookBefore(ctx, request, mqtraceContext);
                 // 是否是批量消息
                 if (requestHeader.isBatch()) {
-                    // 批量发送消息，并返回发送消息结果
+                    // 存储批量消息，并返回存储结果
                     return this.asyncSendBatchMessage(ctx, request, mqtraceContext, requestHeader);
                 } else {
-                    // 发送消息，并返回发送消息结果
+                    // 存储消息，并返回存储结果
                     return this.asyncSendMessage(ctx, request, mqtraceContext, requestHeader);
                 }
         }
@@ -310,7 +310,7 @@ public class SendMessageProcessor extends AbstractSendMessageProcessor implement
                 
                 return CompletableFuture.completedFuture(response);
             }
-            // 添加/存储消息
+            // 添加/存储事务消息
             putMessageResult = this.brokerController.getTransactionalMessageService().asyncPrepareMessage(msgInner);
         } else {
             // 添加/存储消息
