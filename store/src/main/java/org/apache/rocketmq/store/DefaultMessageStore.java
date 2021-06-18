@@ -434,7 +434,7 @@ public class DefaultMessageStore implements MessageStore {
 
         long beginTime = this.getSystemClock().now();
         
-        // TODO 重点 : 存储消息 -> 写入系统文件
+        // 存储消息 -> 写入系统文件
         CompletableFuture<PutMessageResult> putResultFuture = this.commitLog.asyncPutMessage(msg);
 
         putResultFuture.thenAccept((result) -> {

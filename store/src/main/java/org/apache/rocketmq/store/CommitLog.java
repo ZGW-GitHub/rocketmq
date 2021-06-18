@@ -661,7 +661,9 @@ public class CommitLog {
         storeStatsService.getSinglePutMessageTopicTimesTotal(msg.getTopic()).incrementAndGet();
         storeStatsService.getSinglePutMessageTopicSizeTotal(topic).addAndGet(result.getWroteBytes());
 
+        // 刷盘
         CompletableFuture<PutMessageStatus> flushResultFuture = submitFlushRequest(result, msg);
+        // 处理副本
         CompletableFuture<PutMessageStatus> replicaResultFuture = submitReplicaRequest(result, msg);
         return flushResultFuture.thenCombine(replicaResultFuture, (flushStatus, replicaStatus) -> {
             if (flushStatus != PutMessageStatus.PUT_OK) {
@@ -907,7 +909,7 @@ public class CommitLog {
 
         // 消息刷盘（同步 OR 异步），即：持久化到文件，上面插入消息实际未存储到硬盘。
         handleDiskFlush(result, putMessageResult, msg);
-        // 如果是同步Master，同步到从节点(主从同步) TODO zgw 待办：数据同步
+        // 如果是同步Master，同步到从节点(主从同步)
         handleHA(result, putMessageResult, msg);
 
         return putMessageResult;
@@ -939,6 +941,7 @@ public class CommitLog {
     }
 
     public CompletableFuture<PutMessageStatus> submitReplicaRequest(AppendMessageResult result, MessageExt messageExt) {
+        // 如果是同步,给 Slave 发送 Request
         if (BrokerRole.SYNC_MASTER == this.defaultMessageStore.getMessageStoreConfig().getBrokerRole()) {
             HAService service = this.defaultMessageStore.getHaService();
             if (messageExt.isWaitStoreMsgOK()) {
@@ -954,6 +957,7 @@ public class CommitLog {
                 }
             }
         }
+        // 如果是异步,直接返回
         return CompletableFuture.completedFuture(PutMessageStatus.PUT_OK);
     }
 
@@ -985,7 +989,7 @@ public class CommitLog {
         // Asynchronous flush
         else {
             if (!this.defaultMessageStore.getMessageStoreConfig().isTransientStorePoolEnable()) {
-                flushCommitLogService.wakeup(); // TODO zgw mark：唤醒 commitLog 线程，进行 flush
+                flushCommitLogService.wakeup();
             } else {
                 commitLogService.wakeup();
             }

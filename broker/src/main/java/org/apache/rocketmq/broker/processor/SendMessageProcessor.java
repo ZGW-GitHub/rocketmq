@@ -280,7 +280,7 @@ public class SendMessageProcessor extends AbstractSendMessageProcessor implement
         msgInner.setTopic(requestHeader.getTopic());
         msgInner.setQueueId(queueIdInt);
 
-        // 处理消息重发 and 死信队列
+        // 处理重发的消息 and 死信队列
         if (!handleRetryAndDLQ(requestHeader, response, request, msgInner, topicConfig)) {
             return CompletableFuture.completedFuture(response);
         }
@@ -310,10 +310,10 @@ public class SendMessageProcessor extends AbstractSendMessageProcessor implement
                 
                 return CompletableFuture.completedFuture(response);
             }
-            // 添加/存储事务消息
+            // 异步存储事务消息
             putMessageResult = this.brokerController.getTransactionalMessageService().asyncPrepareMessage(msgInner);
         } else {
-            // 添加/存储消息
+            // 异步存储消息
             putMessageResult = this.brokerController.getMessageStore().asyncPutMessage(msgInner);
         }
         return handlePutMessageResultFuture(putMessageResult, response, request, msgInner, responseHeader, mqtraceContext, ctx, queueIdInt);
