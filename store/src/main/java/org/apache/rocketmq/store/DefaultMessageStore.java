@@ -485,27 +485,19 @@ public class DefaultMessageStore implements MessageStore {
         return resultFuture;
     }
 
-    /**
-     * 存储消息封装，最终存储需要 CommitLog 实现
-     * @param msg Message instance to store
-     * @return PutMessageResult
-     */
     @Override
     public PutMessageResult putMessage(MessageExtBrokerInner msg) {
-        // 校验 Broker 是否可以写入
         PutMessageStatus checkStoreStatus = this.checkStoreStatus();
         if (checkStoreStatus != PutMessageStatus.PUT_OK) {
             return new PutMessageResult(checkStoreStatus, null);
         }
 
-        // 消息格式与大小校验
         PutMessageStatus msgCheckStatus = this.checkMessage(msg);
         if (msgCheckStatus == PutMessageStatus.MESSAGE_ILLEGAL) {
             return new PutMessageResult(msgCheckStatus, null);
         }
 
         long beginTime = this.getSystemClock().now();
-        // 添加消息到 commitLog
         PutMessageResult result = this.commitLog.putMessage(msg);
         long elapsedTime = this.getSystemClock().now() - beginTime;
         if (elapsedTime > 500) {

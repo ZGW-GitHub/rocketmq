@@ -336,7 +336,7 @@ public class SendMessageProcessor extends AbstractSendMessageProcessor implement
                                       RemotingCommand request,
                                       MessageExt msg, TopicConfig topicConfig) {
         String newTopic = requestHeader.getTopic();
-        // TODO zgw mark：对 RETRY(重试) 类型的消息处理。若超过最大消费次数，则 Topic 修改成 "%DLQ%" + 分组名，即：加入死信队列
+        // 对 RETRY(重试) 类型的消息处理。若超过最大消费次数，则 Topic 修改成 "%DLQ%" + 分组名，即：加入死信队列
         if (null != newTopic && newTopic.startsWith(MixAll.RETRY_GROUP_TOPIC_PREFIX)) {
             String groupName = newTopic.substring(MixAll.RETRY_GROUP_TOPIC_PREFIX.length());
             // 获取订阅分组配置
@@ -372,8 +372,7 @@ public class SendMessageProcessor extends AbstractSendMessageProcessor implement
                 }
             }
         }
-        
-        // TODO zgw 待办：sysFlag 是什么
+
         int sysFlag = requestHeader.getSysFlag();
         if (TopicFilterType.MULTI_TAG == topicConfig.getTopicFilterType()) {
             sysFlag |= MessageSysFlag.MULTI_TAGS_FLAG;
