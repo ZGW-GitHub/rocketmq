@@ -1132,15 +1132,18 @@ public class BrokerController {
     }
 
     private void handleSlaveSynchronize(BrokerRole role) {
+        // 如果 Broker 角色是 Slave 就启动定时任务定期拉取元数据( 包含：TopicConfig 、ConsumerOffset 、DelayOffset 、SubscriptionGroupConfig )
         if (role == BrokerRole.SLAVE) {
             if (null != slaveSyncFuture) {
                 slaveSyncFuture.cancel(false);
             }
             this.slaveSynchronize.setMasterAddr(null);
+            
             slaveSyncFuture = this.scheduledExecutorService.scheduleAtFixedRate(new Runnable() {
                 @Override
                 public void run() {
                     try {
+                        // 拉取数据的方法
                         BrokerController.this.slaveSynchronize.syncAll();
                     }
                     catch (Throwable e) {

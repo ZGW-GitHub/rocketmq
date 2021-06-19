@@ -46,10 +46,10 @@ public class SlaveSynchronize {
     }
 
     public void syncAll() {
-        this.syncTopicConfig();
-        this.syncConsumerOffset();
-        this.syncDelayOffset();
-        this.syncSubscriptionGroupConfig();
+        this.syncTopicConfig(); // 拉取 TopicConfig
+        this.syncConsumerOffset(); // 拉取 ConsumerOffset
+        this.syncDelayOffset(); // 拉取 DelayOffset
+        this.syncSubscriptionGroupConfig(); // 拉取 SubscriptionGroupConfig
     }
 
     private void syncTopicConfig() {

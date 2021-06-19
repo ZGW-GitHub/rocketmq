@@ -409,6 +409,7 @@ public class HAService {
                     int readSize = this.socketChannel.read(this.byteBufferRead);
                     if (readSize > 0) {
                         readSizeZeroTimes = 0;
+                        // 读取 Master 传输的 CommitLog 数据，并返回是否异常
                         boolean result = this.dispatchReadRequest();
                         if (!result) {
                             log.error("HAClient, dispatchReadRequest error");
@@ -431,18 +432,28 @@ public class HAService {
             return true;
         }
 
+        /**
+         * 读取 Master 传输的 CommitLog 数据，并返回是否异常
+         * 异常原因：
+         *   1. Master 传输来的数据 offset 不等于 Slave 的 CommitLog 数据最大 offset
+         *   2. 上报到Master进度失败
+         *
+         * @return 是否异常
+         */
         private boolean dispatchReadRequest() {
             final int msgHeaderSize = 8 + 4; // phyoffset + size
             int readSocketPos = this.byteBufferRead.position();
 
             while (true) {
+                // 读取到请求
                 int diff = this.byteBufferRead.position() - this.dispatchPosition;
                 if (diff >= msgHeaderSize) {
+                    // 读取 masterPhyOffset、bodySize。使用 dispatchPostion 的原因是：处理数据“粘包”导致数据读取不完整
                     long masterPhyOffset = this.byteBufferRead.getLong(this.dispatchPosition);
                     int bodySize = this.byteBufferRead.getInt(this.dispatchPosition + 8);
 
+                    // 校验 Master 传输来的数据 offset 是否和 Slave 的 CommitLog 数据最大 offset 相同
                     long slavePhyOffset = HAService.this.defaultMessageStore.getMaxPhyOffset();
-
                     if (slavePhyOffset != 0) {
                         if (slavePhyOffset != masterPhyOffset) {
                             log.error("master pushed offset not equal the max phy offset in slave, SLAVE: "
@@ -451,24 +462,29 @@ public class HAService {
                         }
                     }
 
+                    // 读取到消息
                     if (diff >= (msgHeaderSize + bodySize)) {
+                        // 写入CommitLog
                         byte[] bodyData = new byte[bodySize];
                         this.byteBufferRead.position(this.dispatchPosition + msgHeaderSize);
                         this.byteBufferRead.get(bodyData);
-
                         HAService.this.defaultMessageStore.appendToCommitLog(masterPhyOffset, bodyData);
 
+                        // 设置处理到的位置
                         this.byteBufferRead.position(readSocketPos);
                         this.dispatchPosition += msgHeaderSize + bodySize;
 
+                        // 上报到 Master 进度
                         if (!reportSlaveMaxOffsetPlus()) {
                             return false;
                         }
 
+                        // 继续循环
                         continue;
                     }
                 }
 
+                // 空间写满，重新分配空间
                 if (!this.byteBufferRead.hasRemaining()) {
                     this.reallocateByteBuffer();
                 }
@@ -550,7 +566,7 @@ public class HAService {
             while (!this.isStopped()) {
                 try {
                     if (this.connectMaster()) {
-
+                        // 若到满足上报间隔(默认5s)，向 Master 上报 Slave 本地 CommitLog 已经同步到的物理位置。该操作还有心跳的作用。
                         if (this.isTimeToReportOffset()) {
                             boolean result = this.reportSlaveMaxOffset(this.currentReportedOffset);
                             if (!result) {
@@ -560,15 +576,18 @@ public class HAService {
 
                         this.selector.select(1000);
 
+                        // 处理读取事件（ 处理 Master 传输过来的 CommitLog 数据, 并返回是否异常 ）
                         boolean ok = this.processReadEvent();
                         if (!ok) {
                             this.closeMaster();
                         }
 
+                        // 若接收 Master 传输过来的 CommitLog 数据后, 已经同步到的物理位置有变化，则执行再次上报
                         if (!reportSlaveMaxOffsetPlus()) {
                             continue;
                         }
 
+                        // Master 过久未返回数据，关闭连接
                         long interval =
                             HAService.this.getDefaultMessageStore().getSystemClock().now()
                                 - this.lastWriteTimestamp;

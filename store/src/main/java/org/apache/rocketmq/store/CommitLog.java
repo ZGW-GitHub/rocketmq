@@ -663,7 +663,7 @@ public class CommitLog {
 
         // 刷盘
         CompletableFuture<PutMessageStatus> flushResultFuture = submitFlushRequest(result, msg);
-        // 处理副本
+        // 处理 Slave 消息同步
         CompletableFuture<PutMessageStatus> replicaResultFuture = submitReplicaRequest(result, msg);
         return flushResultFuture.thenCombine(replicaResultFuture, (flushStatus, replicaStatus) -> {
             if (flushStatus != PutMessageStatus.PUT_OK) {
@@ -941,7 +941,7 @@ public class CommitLog {
     }
 
     public CompletableFuture<PutMessageStatus> submitReplicaRequest(AppendMessageResult result, MessageExt messageExt) {
-        // 如果是同步,给 Slave 发送 Request
+        // 如果角色是 Sync_Master , 向 Slave 同步 CommitLog
         if (BrokerRole.SYNC_MASTER == this.defaultMessageStore.getMessageStoreConfig().getBrokerRole()) {
             HAService service = this.defaultMessageStore.getHaService();
             if (messageExt.isWaitStoreMsgOK()) {
@@ -957,7 +957,7 @@ public class CommitLog {
                 }
             }
         }
-        // 如果是异步,直接返回
+        // 如果角色不是 Sync_Master 直接返回 OK , 异步同步 CommitLog
         return CompletableFuture.completedFuture(PutMessageStatus.PUT_OK);
     }
 
