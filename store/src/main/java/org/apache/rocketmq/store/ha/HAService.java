@@ -358,6 +358,12 @@ public class HAService {
             return needHeart;
         }
 
+        /**
+         * 上报进度
+         *
+         * @param maxOffset 进度
+         * @return 是否上报成功
+         */
         private boolean reportSlaveMaxOffset(final long maxOffset) {
             this.reportOffset.position(0);
             this.reportOffset.limit(8);
@@ -565,18 +571,20 @@ public class HAService {
 
             while (!this.isStopped()) {
                 try {
+                    // 主动连接 Master ，获取 SocketChannel 对象
                     if (this.connectMaster()) {
-                        // 若到满足上报间隔(默认5s)，向 Master 上报 Slave 本地 CommitLog 已经同步到的物理位置。该操作还有心跳的作用。
                         if (this.isTimeToReportOffset()) {
+                            // 执行上报偏移量到主服务器
                             boolean result = this.reportSlaveMaxOffset(this.currentReportedOffset);
                             if (!result) {
                                 this.closeMaster();
                             }
                         }
 
+                        // 每隔 1s 轮询一遍
                         this.selector.select(1000);
 
-                        // 处理读取事件（ 处理 Master 传输过来的 CommitLog 数据, 并返回是否异常 ）
+                        // 处理 Master 发送过来的消息
                         boolean ok = this.processReadEvent();
                         if (!ok) {
                             this.closeMaster();
