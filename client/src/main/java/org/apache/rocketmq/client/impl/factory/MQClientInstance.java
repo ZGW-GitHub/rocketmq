@@ -234,11 +234,11 @@ public class MQClientInstance {
                     }
                     // Start request-response channel
                     this.mQClientAPIImpl.start();
-                    // Start various schedule tasks
+                    // 启动各种定时任务（启动包含：从 NameSev 拉取 Topic 的 Message Queue 信息）
                     this.startScheduledTask();
-                    // Start pull service
+                    // 启动 PullMessageService（ 拉取消息就是由该线程执行的 ）
                     this.pullMessageService.start();
-                    // Start rebalance service
+                    // 启动 RebalanceService（ 重平衡就是由该线程执行的 ）
                     this.rebalanceService.start();
                     // Start push service
                     this.defaultMQProducer.getDefaultMQProducerImpl().start(false);
@@ -268,8 +268,8 @@ public class MQClientInstance {
             }, 1000 * 10, 1000 * 60 * 2, TimeUnit.MILLISECONDS);
         }
 
+        // 从 NameSer 拉取 Topic 的 Message Queue 信息
         this.scheduledExecutorService.scheduleAtFixedRate(new Runnable() {
-
             @Override
             public void run() {
                 try {
@@ -610,6 +610,7 @@ public class MQClientInstance {
                 try {
                     TopicRouteData topicRouteData;
                     if (isDefault && defaultMQProducer != null) {
+                        // 生产者获取路由信息
                         topicRouteData = this.mQClientAPIImpl.getDefaultTopicRouteInfoFromNameServer(defaultMQProducer.getCreateTopicKey(),
                             1000 * 3);
                         if (topicRouteData != null) {
@@ -620,6 +621,7 @@ public class MQClientInstance {
                             }
                         }
                     } else {
+                        // 消费者获取路由信息
                         topicRouteData = this.mQClientAPIImpl.getTopicRouteInfoFromNameServer(topic, 1000 * 3);
                     }
                     if (topicRouteData != null) {

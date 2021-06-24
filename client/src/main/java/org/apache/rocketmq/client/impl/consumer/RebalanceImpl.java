@@ -238,6 +238,7 @@ public abstract class RebalanceImpl {
     private void rebalanceByTopic(final String topic, final boolean isOrder) {
         switch (messageModel) {
             case BROADCASTING: {
+                // 根据 Topic 获取 MessageQueues
                 Set<MessageQueue> mqSet = this.topicSubscribeInfoTable.get(topic);
                 if (mqSet != null) {
                     boolean changed = this.updateProcessQueueTableInRebalance(topic, mqSet, isOrder);
@@ -325,6 +326,7 @@ public abstract class RebalanceImpl {
         }
     }
 
+    // 重平衡更新 processQueueTable
     private boolean updateProcessQueueTableInRebalance(final String topic, final Set<MessageQueue> mqSet,
         final boolean isOrder) {
         boolean changed = false;
