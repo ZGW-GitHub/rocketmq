@@ -698,6 +698,7 @@ public class DefaultMessageStore implements MessageStore {
                         long diff = maxOffsetPy - maxPhyOffsetPulling;
                         long memory = (long) (StoreUtil.TOTAL_PHYSICAL_MEMORY_SIZE
                             * (this.messageStoreConfig.getAccessMessageInMemoryMaxRatio() / 100.0));
+                        // 建议从 Slave 拉取消息
                         getResult.setSuggestPullingFromSlave(diff > memory);
                     } finally {
 
