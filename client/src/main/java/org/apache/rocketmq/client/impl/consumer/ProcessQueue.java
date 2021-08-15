@@ -130,7 +130,7 @@ public class ProcessQueue {
             this.lockTreeMap.writeLock().lockInterruptibly();
             try {
                 int validMsgCnt = 0;
-                for (MessageExt msg : msgs) {
+                for (MessageExt msg : msgs) { // TODO zgw 为啥用 TreeMap
                     MessageExt old = msgTreeMap.put(msg.getQueueOffset(), msg);
                     if (null == old) {
                         validMsgCnt++;
