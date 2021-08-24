@@ -36,7 +36,7 @@ import org.apache.rocketmq.common.message.MessageExt;
 import org.apache.rocketmq.common.protocol.body.ProcessQueueInfo;
 
 /**
- * Queue consumption snapshot
+ * Queue consumption snapshot 队列消费快照
  */
 public class ProcessQueue {
     public final static long REBALANCE_LOCK_MAX_LIVE_TIME =
@@ -130,12 +130,12 @@ public class ProcessQueue {
             this.lockTreeMap.writeLock().lockInterruptibly();
             try {
                 int validMsgCnt = 0;
-                for (MessageExt msg : msgs) { // TODO zgw 为啥用 TreeMap
+                for (MessageExt msg : msgs) { // 这里使用 treeMap 是为了对消息根据 offset 进行排序,以实现顺序消费
                     MessageExt old = msgTreeMap.put(msg.getQueueOffset(), msg);
-                    if (null == old) {
-                        validMsgCnt++;
-                        this.queueOffsetMax = msg.getQueueOffset();
-                        msgSize.addAndGet(msg.getBody().length);
+                    if (null == old) { // 若没有被替换,说明新增了消息
+                        validMsgCnt++; // 新增消息计数
+                        this.queueOffsetMax = msg.getQueueOffset(); // 消息的最大 offset
+                        msgSize.addAndGet(msg.getBody().length); // 增加消息大小
                     }
                 }
                 msgCount.addAndGet(validMsgCnt);
