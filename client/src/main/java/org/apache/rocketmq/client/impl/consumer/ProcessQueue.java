@@ -46,13 +46,13 @@ public class ProcessQueue {
     private final InternalLogger log = ClientLogger.getLog();
     private final ReadWriteLock lockTreeMap = new ReentrantReadWriteLock();
     private final TreeMap<Long, MessageExt> msgTreeMap = new TreeMap<Long, MessageExt>();
+    /**
+     * msgTreeMap 的子集，只会在顺序消费时使用（用于存储每次顺序消费的一批消息）
+     */
+    private final TreeMap<Long, MessageExt> consumingMsgOrderlyTreeMap = new TreeMap<>();
     private final AtomicLong msgCount = new AtomicLong();
     private final AtomicLong msgSize = new AtomicLong();
     private final Lock lockConsume = new ReentrantLock();
-    /**
-     * A subset of msgTreeMap, will only be used when orderly consume
-     */
-    private final TreeMap<Long, MessageExt> consumingMsgOrderlyTreeMap = new TreeMap<Long, MessageExt>();
     private final AtomicLong tryUnlockTimes = new AtomicLong(0);
     private volatile long queueOffsetMax = 0L;
     private volatile boolean dropped = false;
@@ -305,7 +305,7 @@ public class ProcessQueue {
             try {
                 if (!this.msgTreeMap.isEmpty()) {
                     for (int i = 0; i < batchSize; i++) {
-                        Map.Entry<Long, MessageExt> entry = this.msgTreeMap.pollFirstEntry();
+                        Map.Entry<Long, MessageExt> entry = this.msgTreeMap.pollFirstEntry(); // first 即 offset 最小的 msg
                         if (entry != null) {
                             result.add(entry.getValue());
                             consumingMsgOrderlyTreeMap.put(entry.getKey(), entry.getValue());

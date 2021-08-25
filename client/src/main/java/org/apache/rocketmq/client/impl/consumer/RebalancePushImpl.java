@@ -81,24 +81,29 @@ public class RebalancePushImpl extends RebalanceImpl {
         this.getmQClientFactory().sendHeartbeatToAllBrokerWithLock();
     }
 
+    /**
+     * 消费者移除指定的 MessageQueue
+     */
     @Override
     public boolean removeUnnecessaryMessageQueue(MessageQueue mq, ProcessQueue pq) {
-        this.defaultMQPushConsumerImpl.getOffsetStore().persist(mq);
+        this.defaultMQPushConsumerImpl.getOffsetStore().persist(mq); // 发送 request 到 Broker 持久化消费完成的最大偏移量
         this.defaultMQPushConsumerImpl.getOffsetStore().removeOffset(mq);
+        
+        
         if (this.defaultMQPushConsumerImpl.isConsumeOrderly()
             && MessageModel.CLUSTERING.equals(this.defaultMQPushConsumerImpl.messageModel())) {
             try {
+                // 加锁，防止并发
                 if (pq.getLockConsume().tryLock(1000, TimeUnit.MILLISECONDS)) {
                     try {
+                        // 发送 request 到 Broker 来 unlock 该 MessageQueue
                         return this.unlockDelay(mq, pq);
                     } finally {
+                        // 释放锁
                         pq.getLockConsume().unlock();
                     }
                 } else {
-                    log.warn("[WRONG]mq is consuming, so can not unlock it, {}. maybe hanged for a while, {}",
-                        mq,
-                        pq.getTryUnlockTimes());
-
+                    log.warn("[WRONG]mq is consuming, so can not unlock it, {}. maybe hanged for a while, {}", mq, pq.getTryUnlockTimes());
                     pq.incTryUnlockTimes();
                 }
             } catch (Exception e) {
@@ -111,8 +116,7 @@ public class RebalancePushImpl extends RebalanceImpl {
     }
 
     private boolean unlockDelay(final MessageQueue mq, final ProcessQueue pq) {
-
-        if (pq.hasTempMessage()) {
+        if (pq.hasTempMessage()) { // 有临时消息，延迟 20 秒发送 unlock Request
             log.info("[{}]unlockDelay, begin {} ", mq.hashCode(), mq);
             this.defaultMQPushConsumerImpl.getmQClientFactory().getScheduledExecutorService().schedule(new Runnable() {
                 @Override
@@ -121,7 +125,7 @@ public class RebalancePushImpl extends RebalanceImpl {
                     RebalancePushImpl.this.unlock(mq, true);
                 }
             }, UNLOCK_DELAY_TIME_MILLS, TimeUnit.MILLISECONDS);
-        } else {
+        } else { // 发送 unlock Request
             this.unlock(mq, true);
         }
         return true;
