@@ -296,6 +296,9 @@ public class ProcessQueue {
         }
     }
 
+    /**
+     * 顺序消费，获取指定数量的消息，获取的消息会在 consumingMsgOrderlyTreeMap 存一份，以便后续 commit offset
+     */
     public List<MessageExt> takeMessages(final int batchSize) {
         List<MessageExt> result = new ArrayList<MessageExt>(batchSize);
         final long now = System.currentTimeMillis();

@@ -43,10 +43,11 @@ import org.apache.rocketmq.common.protocol.heartbeat.SubscriptionData;
 public abstract class RebalanceImpl {
     protected static final InternalLogger log = ClientLogger.getLog();
     protected final ConcurrentMap<MessageQueue, ProcessQueue> processQueueTable = new ConcurrentHashMap<>(64);
-    protected final ConcurrentMap<String/* topic */, Set<MessageQueue>> topicSubscribeInfoTable =
-        new ConcurrentHashMap<String, Set<MessageQueue>>();
-    protected final ConcurrentMap<String /* topic */, SubscriptionData> subscriptionInner =
-        new ConcurrentHashMap<String, SubscriptionData>();
+    /**
+     * 该 Topic 所拥有的所有 MessageQueue 
+     */
+    protected final ConcurrentMap<String/* topic */, Set<MessageQueue>> topicSubscribeInfoTable = new ConcurrentHashMap<>();
+    protected final ConcurrentMap<String /* topic */, SubscriptionData> subscriptionInner = new ConcurrentHashMap<>();
     protected String consumerGroup;
     protected MessageModel messageModel;
     protected AllocateMessageQueueStrategy allocateMessageQueueStrategy;
@@ -137,6 +138,7 @@ public abstract class RebalanceImpl {
             requestBody.getMqSet().add(mq);
 
             try {
+                // 向 Broker 请求锁定 msgQueue ，并获取锁定成功的 msgQueues
                 Set<MessageQueue> lockedMq = this.mQClientFactory.getMQClientAPIImpl().lockBatchMQ(findBrokerResult.getBrokerAddr(), requestBody, 1000);
                 for (MessageQueue mmqq : lockedMq) {
                     ProcessQueue processQueue = this.processQueueTable.get(mmqq);
@@ -317,6 +319,7 @@ public abstract class RebalanceImpl {
     private boolean updateProcessQueueTableInRebalance(final String topic, final Set<MessageQueue> mqSet /*分配到的 MessageQueue*/, final boolean isOrder) {
         boolean changed = false;
 
+        // 获取当前消费者正在消费的 MessageQueue 与 MessageQueue 对应的 ProcessQueue
         Iterator<Entry<MessageQueue, ProcessQueue>> it = this.processQueueTable.entrySet().iterator();
         while (it.hasNext()) {
             Entry<MessageQueue, ProcessQueue> next = it.next();
@@ -324,19 +327,21 @@ public abstract class RebalanceImpl {
             ProcessQueue pq = next.getValue();
 
             if (mq.getTopic().equals(topic)) {
-                if (!mqSet.contains(mq)) {
+                if (!mqSet.contains(mq)) { // 若正在消费的 MessageQueue 不包含在 新分配到的 MessageQueue 中, 进行下面的操作
                     pq.setDropped(true);
+                    // 将该 MessageQueue 与其对应的 ProcessQueue 从当前消费者移除
                     if (this.removeUnnecessaryMessageQueue(mq, pq)) {
                         it.remove();
                         changed = true;
                         log.info("doRebalance, {}, remove unnecessary mq, {}", consumerGroup, mq);
                     }
-                } else if (pq.isPullExpired()) {
+                } else if (pq.isPullExpired()) { // 若正在消费的 MessageQueue 包含在 新分配到的 MessageQueue 中, 但距离最后一次拉取消息的时间太久了, 进行下面的操作
                     switch (this.consumeType()) {
                         case CONSUME_ACTIVELY:
                             break;
                         case CONSUME_PASSIVELY:
                             pq.setDropped(true);
+                            // 将该 MessageQueue 与其对应的 ProcessQueue 从当前消费者移除
                             if (this.removeUnnecessaryMessageQueue(mq, pq)) {
                                 it.remove();
                                 changed = true;
@@ -350,10 +355,10 @@ public abstract class RebalanceImpl {
             }
         }
 
-        List<PullRequest> pullRequestList = new ArrayList<PullRequest>();
-        for (MessageQueue mq : mqSet) {
-            if (!this.processQueueTable.containsKey(mq)) {
-                if (isOrder && !this.lock(mq)) {
+        List<PullRequest> pullRequestList = new ArrayList<>();
+        for (MessageQueue mq : mqSet) { // 遍历分配给当前消费者的 MessageQueue
+            if (!this.processQueueTable.containsKey(mq)) { // 若该 MessageQueue 不包含在正在消费的 MessageQueue 中, 进行下面的操作
+                if (isOrder && !this.lock(mq)) { // 若是顺序消费, 执行 lock MessageQueue
                     log.warn("doRebalance, {}, add a new mq failed, {}, because lock failed", consumerGroup, mq);
                     continue;
                 }
