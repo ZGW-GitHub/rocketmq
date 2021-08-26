@@ -29,8 +29,7 @@ import org.apache.rocketmq.common.message.MessageQueue;
 
 public class RebalanceLockManager {
     private static final InternalLogger log = InternalLoggerFactory.getLogger(LoggerName.REBALANCE_LOCK_LOGGER_NAME);
-    private final static long REBALANCE_LOCK_MAX_LIVE_TIME = Long.parseLong(System.getProperty(
-        "rocketmq.broker.rebalance.lockMaxLiveTime", "60000"));
+    private final static long REBALANCE_LOCK_MAX_LIVE_TIME = Long.parseLong(System.getProperty("rocketmq.broker.rebalance.lockMaxLiveTime", "60000"));
     private final Lock lock = new ReentrantLock();
     private final ConcurrentMap<String/* group */, ConcurrentHashMap<MessageQueue, LockEntry>> mqLockTable = new ConcurrentHashMap<>(1024);
 
@@ -155,7 +154,9 @@ public class RebalanceLockManager {
 
                         String oldClientId = lockEntry.getClientId(); // 该 MessageQueue 的旧持有者
 
-                        if (lockEntry.isExpired()) { // 若就持有者仍活跃(即: 就持有者仍在及时地拉取消息)
+                        // 若旧持有者仍活跃(即: 旧持有者仍在及时地拉取消息)，则对该 MessageQueue 加锁失败
+                        // 若旧持有者不活跃了，则对该 MessageQueue 加锁
+                        if (lockEntry.isExpired()) {
                             lockEntry.setClientId(clientId);
                             lockEntry.setLastUpdateTimestamp(System.currentTimeMillis());
                             log.warn("tryLockBatch, message queue lock expired, I got it. Group: {} OldClientId: {} NewClientId: {} {}", group, oldClientId, clientId, mq);

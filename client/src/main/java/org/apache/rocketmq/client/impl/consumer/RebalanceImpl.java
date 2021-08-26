@@ -119,7 +119,7 @@ public abstract class RebalanceImpl {
         for (MessageQueue mq : this.processQueueTable.keySet()) {
             Set<MessageQueue> mqs = result.get(mq.getBrokerName());
             if (null == mqs) {
-                mqs = new HashSet<MessageQueue>();
+                mqs = new HashSet<>();
                 result.put(mq.getBrokerName(), mqs);
             }
 
@@ -240,6 +240,7 @@ public abstract class RebalanceImpl {
                 if (mqSet != null) {
                     boolean changed = this.updateProcessQueueTableInRebalance(topic, mqSet, isOrder);
                     if (changed) {
+                        // TODO zgw 通知 Brokers Consumer-MessageQueue 对应关系发生改变
                         this.messageQueueChanged(topic, mqSet, mqSet);
                         log.info("messageQueueChanged {} {} {} {}", consumerGroup, topic, mqSet, mqSet);
                     }
@@ -290,6 +291,7 @@ public abstract class RebalanceImpl {
                     if (changed) {
                         log.info("rebalanced result changed. allocateMessageQueueStrategyName={}, group={}, topic={}, clientId={}, mqAllSize={}, cidAllSize={}, rebalanceResultSize={}, rebalanceResultSet={}",
                             strategy.getName(), consumerGroup, topic, this.mQClientFactory.getClientId(), mqSet.size(), cidAll.size(), allocateResultSet.size(), allocateResultSet);
+                        // TODO zgw 通知 Brokers Consumer-MessageQueue 对应关系发生改变
                         this.messageQueueChanged(topic, mqSet, allocateResultSet);
                     }
                 }
