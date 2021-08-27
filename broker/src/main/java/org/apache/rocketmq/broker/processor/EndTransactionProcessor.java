@@ -113,8 +113,8 @@ public class EndTransactionProcessor extends AsyncNettyRequestProcessor implemen
         OperationResult result = new OperationResult();
         // commit
         if (MessageSysFlag.TRANSACTION_COMMIT_TYPE == requestHeader.getCommitOrRollback()) {
+            // 从 file 中取出消息
             result = this.brokerController.getTransactionalMessageService().commitMessage(requestHeader);
-            
             if (result.getResponseCode() == ResponseCode.SUCCESS) {
                 RemotingCommand res = checkPrepareMessage(result.getPrepareMessage(), requestHeader);
                 if (res.getCode() == ResponseCode.SUCCESS) {
@@ -124,6 +124,7 @@ public class EndTransactionProcessor extends AsyncNettyRequestProcessor implemen
                     msgInner.setPreparedTransactionOffset(requestHeader.getCommitLogOffset());
                     msgInner.setStoreTimestamp(result.getPrepareMessage().getStoreTimestamp());
                     MessageAccessor.clearProperty(msgInner, MessageConst.PROPERTY_TRANSACTION_PREPARED);
+                    // 将消息追加到物理文件(commitLog)中
                     RemotingCommand sendResult = sendFinalMessage(msgInner);
                     if (sendResult.getCode() == ResponseCode.SUCCESS) {
                         this.brokerController.getTransactionalMessageService().deletePrepareMessage(result.getPrepareMessage());
