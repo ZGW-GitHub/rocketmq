@@ -80,8 +80,7 @@ public class TransactionMQProducer extends DefaultMQProducer {
     }
 
     @Override
-    public TransactionSendResult sendMessageInTransaction(final Message msg,
-        final Object arg) throws MQClientException {
+    public TransactionSendResult sendMessageInTransaction(final Message msg, final Object arg) throws MQClientException {
         if (null == this.transactionListener) {
             throw new MQClientException("TransactionListener is null", null);
         }

@@ -415,8 +415,7 @@ public abstract class NettyRemotingAbstract {
     }
 
     // 消息就是在这里发送出去的
-    public RemotingCommand invokeSyncImpl(final Channel channel, final RemotingCommand request,
-        final long timeoutMillis)
+    public RemotingCommand invokeSyncImpl(final Channel channel, final RemotingCommand request, final long timeoutMillis)
         throws InterruptedException, RemotingSendRequestException, RemotingTimeoutException {
         final int opaque = request.getOpaque();
 
@@ -444,8 +443,7 @@ public abstract class NettyRemotingAbstract {
             RemotingCommand responseCommand = responseFuture.waitResponse(timeoutMillis);
             if (null == responseCommand) {
                 if (responseFuture.isSendRequestOK()) {
-                    throw new RemotingTimeoutException(RemotingHelper.parseSocketAddressAddr(addr), timeoutMillis,
-                        responseFuture.getCause());
+                    throw new RemotingTimeoutException(RemotingHelper.parseSocketAddressAddr(addr), timeoutMillis, responseFuture.getCause());
                 } else {
                     throw new RemotingSendRequestException(RemotingHelper.parseSocketAddressAddr(addr), responseFuture.getCause());
                 }
@@ -457,16 +455,17 @@ public abstract class NettyRemotingAbstract {
         }
     }
 
-    public void invokeAsyncImpl(final Channel channel, final RemotingCommand request, final long timeoutMillis,
-        final InvokeCallback invokeCallback)
-        throws InterruptedException, RemotingTooMuchRequestException, RemotingTimeoutException, RemotingSendRequestException {
+    public void invokeAsyncImpl(final Channel channel, final RemotingCommand request, final long timeoutMillis, final InvokeCallback invokeCallback) throws InterruptedException, RemotingTooMuchRequestException, RemotingTimeoutException, RemotingSendRequestException {
         long beginStartTime = System.currentTimeMillis();
+        
         final int opaque = request.getOpaque();
+        
+        // 超时阻塞地获取信号量
         boolean acquired = this.semaphoreAsync.tryAcquire(timeoutMillis, TimeUnit.MILLISECONDS);
-        if (acquired) {
+        if (acquired) { // 获取成功
             final SemaphoreReleaseOnlyOnce once = new SemaphoreReleaseOnlyOnce(this.semaphoreAsync);
             long costTime = System.currentTimeMillis() - beginStartTime;
-            if (timeoutMillis < costTime) {
+            if (timeoutMillis < costTime) { // 超时了
                 once.release();
                 throw new RemotingTimeoutException("invokeAsyncImpl call timeout");
             }
@@ -490,16 +489,12 @@ public abstract class NettyRemotingAbstract {
                 log.warn("send a request command to channel <" + RemotingHelper.parseChannelRemoteAddr(channel) + "> Exception", e);
                 throw new RemotingSendRequestException(RemotingHelper.parseChannelRemoteAddr(channel), e);
             }
-        } else {
+        } else { // 获取失败
             if (timeoutMillis <= 0) {
                 throw new RemotingTooMuchRequestException("invokeAsyncImpl invoke too fast");
             } else {
-                String info =
-                    String.format("invokeAsyncImpl tryAcquire semaphore timeout, %dms, waiting thread nums: %d semaphoreAsyncValue: %d",
-                        timeoutMillis,
-                        this.semaphoreAsync.getQueueLength(),
-                        this.semaphoreAsync.availablePermits()
-                    );
+                String info = String.format("invokeAsyncImpl tryAcquire semaphore timeout, %dms, waiting thread nums: %d semaphoreAsyncValue: %d",
+                        timeoutMillis, this.semaphoreAsync.getQueueLength(), this.semaphoreAsync.availablePermits());
                 log.warn(info);
                 throw new RemotingTimeoutException(info);
             }
