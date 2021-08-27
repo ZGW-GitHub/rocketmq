@@ -50,71 +50,60 @@ public class EndTransactionProcessor extends AsyncNettyRequestProcessor implemen
         this.brokerController = brokerController;
     }
 
+    /**
+     * 处理事务消息(commit、rollBack、unknow)
+     */
     @Override
-    public RemotingCommand processRequest(ChannelHandlerContext ctx, RemotingCommand request) throws
-        RemotingCommandException {
+    public RemotingCommand processRequest(ChannelHandlerContext ctx, RemotingCommand request) throws RemotingCommandException {
         final RemotingCommand response = RemotingCommand.createResponseCommand(null);
         final EndTransactionRequestHeader requestHeader = (EndTransactionRequestHeader) request.decodeCommandCustomHeader(EndTransactionRequestHeader.class);
         LOGGER.debug("Transaction request:{}", requestHeader);
+        
+        // 若收到该 Request 的是 Slave Broker , 直接返回(Slave 不处理事务消息)
         if (BrokerRole.SLAVE == brokerController.getMessageStoreConfig().getBrokerRole()) {
             response.setCode(ResponseCode.SLAVE_NOT_AVAILABLE);
             LOGGER.warn("Message store is slave mode, so end transaction is forbidden. ");
             return response;
         }
 
+        // 请求是否是因事务回查而发来的
         if (requestHeader.getFromTransactionCheck()) {
             switch (requestHeader.getCommitOrRollback()) {
-                case MessageSysFlag.TRANSACTION_NOT_TYPE: {
-                    LOGGER.warn("Check producer[{}] transaction state, but it's pending status."
-                            + "RequestHeader: {} Remark: {}",
-                        RemotingHelper.parseChannelRemoteAddr(ctx.channel()),
-                        requestHeader.toString(),
-                        request.getRemark());
+                case MessageSysFlag.TRANSACTION_NOT_TYPE: { // 回查结果为 unknown , 直接返回
+                    LOGGER.warn("Check producer[{}] transaction state, but it's pending status." + "RequestHeader: {} Remark: {}",
+                        RemotingHelper.parseChannelRemoteAddr(ctx.channel()), requestHeader.toString(), request.getRemark());
                     return null;
                 }
 
-                case MessageSysFlag.TRANSACTION_COMMIT_TYPE: {
-                    LOGGER.warn("Check producer[{}] transaction state, the producer commit the message."
-                            + "RequestHeader: {} Remark: {}",
-                        RemotingHelper.parseChannelRemoteAddr(ctx.channel()),
-                        requestHeader.toString(),
-                        request.getRemark());
-
+                case MessageSysFlag.TRANSACTION_COMMIT_TYPE: { // 回查结果为 commit , 继续执行
+                    LOGGER.warn("Check producer[{}] transaction state, the producer commit the message." + "RequestHeader: {} Remark: {}",
+                        RemotingHelper.parseChannelRemoteAddr(ctx.channel()), requestHeader.toString(), request.getRemark());
                     break;
                 }
 
-                case MessageSysFlag.TRANSACTION_ROLLBACK_TYPE: {
-                    LOGGER.warn("Check producer[{}] transaction state, the producer rollback the message."
-                            + "RequestHeader: {} Remark: {}",
-                        RemotingHelper.parseChannelRemoteAddr(ctx.channel()),
-                        requestHeader.toString(),
-                        request.getRemark());
+                case MessageSysFlag.TRANSACTION_ROLLBACK_TYPE: { // 回查结果为 rollBack , 继续执行
+                    LOGGER.warn("Check producer[{}] transaction state, the producer rollback the message." + "RequestHeader: {} Remark: {}",
+                        RemotingHelper.parseChannelRemoteAddr(ctx.channel()), requestHeader.toString(), request.getRemark());
                     break;
                 }
                 default:
                     return null;
             }
-        } else {
+        } else { // 请求是 client 执行本地事务后主动发来的
             switch (requestHeader.getCommitOrRollback()) {
-                case MessageSysFlag.TRANSACTION_NOT_TYPE: {
-                    LOGGER.warn("The producer[{}] end transaction in sending message,  and it's pending status."
-                            + "RequestHeader: {} Remark: {}",
-                        RemotingHelper.parseChannelRemoteAddr(ctx.channel()),
-                        requestHeader.toString(),
-                        request.getRemark());
+                case MessageSysFlag.TRANSACTION_NOT_TYPE: { // 本地事务执行结果为 unknown , 直接返回
+                    LOGGER.warn("The producer[{}] end transaction in sending message,  and it's pending status." + "RequestHeader: {} Remark: {}",
+                        RemotingHelper.parseChannelRemoteAddr(ctx.channel()), requestHeader.toString(), request.getRemark());
                     return null;
                 }
 
-                case MessageSysFlag.TRANSACTION_COMMIT_TYPE: {
+                case MessageSysFlag.TRANSACTION_COMMIT_TYPE: { // 本地事务执行结果为 commit , 继续执行
                     break;
                 }
 
-                case MessageSysFlag.TRANSACTION_ROLLBACK_TYPE: {
-                    LOGGER.warn("The producer[{}] end transaction in sending message, rollback the message."
-                            + "RequestHeader: {} Remark: {}",
-                        RemotingHelper.parseChannelRemoteAddr(ctx.channel()),
-                        requestHeader.toString(),
-                        request.getRemark());
+                case MessageSysFlag.TRANSACTION_ROLLBACK_TYPE: { // 本地事务执行结果为 rollBack , 继续执行
+                    LOGGER.warn("The producer[{}] end transaction in sending message, rollback the message." + "RequestHeader: {} Remark: {}",
+                        RemotingHelper.parseChannelRemoteAddr(ctx.channel()), requestHeader.toString(), request.getRemark());
                     break;
                 }
                 default:
@@ -122,8 +111,10 @@ public class EndTransactionProcessor extends AsyncNettyRequestProcessor implemen
             }
         }
         OperationResult result = new OperationResult();
+        // commit
         if (MessageSysFlag.TRANSACTION_COMMIT_TYPE == requestHeader.getCommitOrRollback()) {
             result = this.brokerController.getTransactionalMessageService().commitMessage(requestHeader);
+            
             if (result.getResponseCode() == ResponseCode.SUCCESS) {
                 RemotingCommand res = checkPrepareMessage(result.getPrepareMessage(), requestHeader);
                 if (res.getCode() == ResponseCode.SUCCESS) {
@@ -141,8 +132,9 @@ public class EndTransactionProcessor extends AsyncNettyRequestProcessor implemen
                 }
                 return res;
             }
-        } else if (MessageSysFlag.TRANSACTION_ROLLBACK_TYPE == requestHeader.getCommitOrRollback()) {
+        } else if (MessageSysFlag.TRANSACTION_ROLLBACK_TYPE == requestHeader.getCommitOrRollback()) { // rollBack
             result = this.brokerController.getTransactionalMessageService().rollbackMessage(requestHeader);
+            
             if (result.getResponseCode() == ResponseCode.SUCCESS) {
                 RemotingCommand res = checkPrepareMessage(result.getPrepareMessage(), requestHeader);
                 if (res.getCode() == ResponseCode.SUCCESS) {
