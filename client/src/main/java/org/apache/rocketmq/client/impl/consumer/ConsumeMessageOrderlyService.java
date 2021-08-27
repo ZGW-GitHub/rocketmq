@@ -200,7 +200,10 @@ public class ConsumeMessageOrderlyService implements ConsumeMessageService {
         final ProcessQueue processQueue,
         final MessageQueue messageQueue,
         final boolean dispathToConsume) {
-        if (dispathToConsume) {
+        if (dispathToConsume) { // 顺序消息, 当 dispathToConsume=true 即: 以前拉取的消息处理完了, 才会提交消费请求到线程池
+            // 该消费请求没指定要消费的消息,即:该请求会一直被线程池中的某个线程执行,直到 ProcessQueue 的 msgTreeMap 里没有消息
+            // 可能出现这种情况的原因: 消息消费的速度慢于拉取的速度,那么一个消费请求会一直持续消费
+            // 也就是一个线程一直维持着消费消息,不释放 MessageQueue 的 {@link MessageQueueLock} 锁,其它线程干瞪眼等待
             ConsumeRequest consumeRequest = new ConsumeRequest(processQueue, messageQueue);
             this.consumeExecutor.submit(consumeRequest);
         }
@@ -413,7 +416,7 @@ public class ConsumeMessageOrderlyService implements ConsumeMessageService {
                 return;
             }
             
-            // 每个 MessageQueue 都有一个 Obj 作为 lock，这就保证了后到线程池的 runnable 一定比先到的后执行 TODO zgw synchronize 是非公平锁，可能导致后到 runnable 先抢到锁
+            // 每个 MessageQueue 都有一个 Obj 作为 lock
             synchronized (messageQueueLock.fetchLockObject(this.messageQueue)) {
                 if (MessageModel.BROADCASTING.equals(ConsumeMessageOrderlyService.this.defaultMQPushConsumerImpl.messageModel())
                     || (this.processQueue.isLocked() && !this.processQueue.isLockExpired())) {

@@ -124,6 +124,10 @@ public class ProcessQueue {
         }
     }
 
+    /**
+     * @param msgs 拉取到的消息
+     * @return 以前拉取的消息是否处理完了
+     */
     public boolean putMessage(final List<MessageExt> msgs) {
         boolean dispatchToConsume = false;
         try {

@@ -84,23 +84,22 @@ public class RebalancePushImpl extends RebalanceImpl {
      */
     @Override
     public boolean removeUnnecessaryMessageQueue(MessageQueue mq, ProcessQueue pq) {
-        this.defaultMQPushConsumerImpl.getOffsetStore().persist(mq); // 发送 request 到 Broker 持久化消费完成的最大偏移量
+        // 发送 request 到 Broker 持久化消费完成的最大偏移量
+        this.defaultMQPushConsumerImpl.getOffsetStore().persist(mq);
         this.defaultMQPushConsumerImpl.getOffsetStore().removeOffset(mq);
         
         
-        if (this.defaultMQPushConsumerImpl.isConsumeOrderly()
-            && MessageModel.CLUSTERING.equals(this.defaultMQPushConsumerImpl.messageModel())) {
+        if (this.defaultMQPushConsumerImpl.isConsumeOrderly() && MessageModel.CLUSTERING.equals(this.defaultMQPushConsumerImpl.messageModel())) {
             try {
-                // 加锁，防止并发
+                // 若消费者正在消费消息则 tryLock 会被阻塞, 若阻塞超过 1 秒则 tryLock 失败
                 if (pq.getLockConsume().tryLock(1000, TimeUnit.MILLISECONDS)) {
                     try {
                         // 发送 request 到 Broker 来 unlock 该 MessageQueue
                         return this.unlockDelay(mq, pq);
                     } finally {
-                        // 释放锁
                         pq.getLockConsume().unlock();
                     }
-                } else {
+                } else { // 消费者正在消费消息, 则不发送 request 到 Broker unlock MessageQueue , 即: Broker 的 MessageQueue 只能等 60 秒后才能被其它 Consumer lock
                     log.warn("[WRONG]mq is consuming, so can not unlock it, {}. maybe hanged for a while, {}", mq, pq.getTryUnlockTimes());
                     pq.incTryUnlockTimes();
                 }
@@ -114,7 +113,7 @@ public class RebalancePushImpl extends RebalanceImpl {
     }
 
     private boolean unlockDelay(final MessageQueue mq, final ProcessQueue pq) {
-        if (pq.hasTempMessage()) { // 有临时消息，延迟 20 秒发送 unlock Request
+        if (pq.hasTempMessage()) { // 还有消息没处理完，延迟 20 秒发送 unlock Request
             log.info("[{}]unlockDelay, begin {} ", mq.hashCode(), mq);
             this.defaultMQPushConsumerImpl.getmQClientFactory().getScheduledExecutorService().schedule(new Runnable() {
                 @Override

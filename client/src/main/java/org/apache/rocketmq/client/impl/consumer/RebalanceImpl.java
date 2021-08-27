@@ -330,7 +330,7 @@ public abstract class RebalanceImpl {
 
             if (mq.getTopic().equals(topic)) {
                 if (!mqSet.contains(mq)) { // 若正在消费的 MessageQueue 不包含在 新分配到的 MessageQueue 中, 进行下面的操作
-                    pq.setDropped(true);
+                    pq.setDropped(true); // 不再继续消费剩余的消息
                     // 将该 MessageQueue 与其对应的 ProcessQueue 从当前消费者移除
                     if (this.removeUnnecessaryMessageQueue(mq, pq)) {
                         it.remove();
@@ -342,7 +342,7 @@ public abstract class RebalanceImpl {
                         case CONSUME_ACTIVELY:
                             break;
                         case CONSUME_PASSIVELY:
-                            pq.setDropped(true);
+                            pq.setDropped(true); // 不再继续消费剩余的消息
                             // 将该 MessageQueue 与其对应的 ProcessQueue 从当前消费者移除
                             if (this.removeUnnecessaryMessageQueue(mq, pq)) {
                                 it.remove();
