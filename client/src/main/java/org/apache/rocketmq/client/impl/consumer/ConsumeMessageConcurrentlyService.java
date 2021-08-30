@@ -277,17 +277,17 @@ public class ConsumeMessageConcurrentlyService implements ConsumeMessageService 
                 }
                 break;
             case CLUSTERING:
-                List<MessageExt> msgBackFailed = new ArrayList<MessageExt>(consumeRequest.getMsgs().size());
+                List<MessageExt> msgBackFailed = new ArrayList<>(consumeRequest.getMsgs().size());
                 for (int i = ackIndex + 1; i < consumeRequest.getMsgs().size(); i++) {
                     MessageExt msg = consumeRequest.getMsgs().get(i);
-                    boolean result = this.sendMessageBack(msg, context);
-                    if (!result) {
+                    boolean result = this.sendMessageBack(msg, context); // 将消息发送到 Broker 的重试队列中
+                    if (!result) { // 消息发送到 Broker 的重试队列中,失败
                         msg.setReconsumeTimes(msg.getReconsumeTimes() + 1);
                         msgBackFailed.add(msg);
                     }
                 }
 
-                if (!msgBackFailed.isEmpty()) {
+                if (!msgBackFailed.isEmpty()) { // 将发送到 Broker 的重试队列中失败的消息进行消费重试
                     consumeRequest.getMsgs().removeAll(msgBackFailed);
 
                     this.submitConsumeRequestLater(msgBackFailed, consumeRequest.getProcessQueue(), consumeRequest.getMessageQueue());

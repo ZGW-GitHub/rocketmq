@@ -90,8 +90,7 @@ public class SendMessageProcessor extends AbstractSendMessageProcessor implement
                                                                   RemotingCommand request) throws RemotingCommandException {
         final SendMessageContext mqtraceContext;
         switch (request.getCode()) {
-            case RequestCode.CONSUMER_SEND_MSG_BACK:
-                // TODO zgw 待办：CONSUMER_SEND_MSG_BACK
+            case RequestCode.CONSUMER_SEND_MSG_BACK: // 消息消费过程中出现异常，消息被发送回来
                 return this.asyncConsumerSendMsgBack(ctx, request);
             default:
                 // 解析请求
@@ -120,22 +119,19 @@ public class SendMessageProcessor extends AbstractSendMessageProcessor implement
             this.brokerController.getMessageStore().isTransientStorePoolDeficient();
     }
 
-    private CompletableFuture<RemotingCommand> asyncConsumerSendMsgBack(ChannelHandlerContext ctx,
-                                                                        RemotingCommand request) throws RemotingCommandException {
+    private CompletableFuture<RemotingCommand> asyncConsumerSendMsgBack(ChannelHandlerContext ctx, RemotingCommand request) throws RemotingCommandException {
         final RemotingCommand response = RemotingCommand.createResponseCommand(null);
-        final ConsumerSendMsgBackRequestHeader requestHeader =
-                (ConsumerSendMsgBackRequestHeader)request.decodeCommandCustomHeader(ConsumerSendMsgBackRequestHeader.class);
+        final ConsumerSendMsgBackRequestHeader requestHeader = (ConsumerSendMsgBackRequestHeader) request.decodeCommandCustomHeader(ConsumerSendMsgBackRequestHeader.class);
         String namespace = NamespaceUtil.getNamespaceFromResource(requestHeader.getGroup());
         if (this.hasConsumeMessageHook() && !UtilAll.isBlank(requestHeader.getOriginMsgId())) {
             ConsumeMessageContext context = buildConsumeMessageContext(namespace, requestHeader, request);
             this.executeConsumeMessageHookAfter(context);
         }
-        SubscriptionGroupConfig subscriptionGroupConfig =
-            this.brokerController.getSubscriptionGroupManager().findSubscriptionGroupConfig(requestHeader.getGroup());
+
+        SubscriptionGroupConfig subscriptionGroupConfig = this.brokerController.getSubscriptionGroupManager().findSubscriptionGroupConfig(requestHeader.getGroup());
         if (null == subscriptionGroupConfig) {
             response.setCode(ResponseCode.SUBSCRIPTION_GROUP_NOT_EXIST);
-            response.setRemark("subscription group not exist, " + requestHeader.getGroup() + " "
-                + FAQUrl.suggestTodo(FAQUrl.SUBSCRIPTION_GROUP_NOT_EXIST));
+            response.setRemark("subscription group not exist, " + requestHeader.getGroup() + " " + FAQUrl.suggestTodo(FAQUrl.SUBSCRIPTION_GROUP_NOT_EXIST));
             return CompletableFuture.completedFuture(response);
         }
         if (!PermName.isWriteable(this.brokerController.getBrokerConfig().getBrokerPermission())) {
@@ -158,20 +154,18 @@ public class SendMessageProcessor extends AbstractSendMessageProcessor implement
         }
 
         TopicConfig topicConfig = this.brokerController.getTopicConfigManager().createTopicInSendMessageBackMethod(
-            newTopic,
-            subscriptionGroupConfig.getRetryQueueNums(),
-            PermName.PERM_WRITE | PermName.PERM_READ, topicSysFlag);
+            newTopic, subscriptionGroupConfig.getRetryQueueNums(), PermName.PERM_WRITE | PermName.PERM_READ, topicSysFlag);
         if (null == topicConfig) {
             response.setCode(ResponseCode.SYSTEM_ERROR);
             response.setRemark("topic[" + newTopic + "] not exist");
             return CompletableFuture.completedFuture(response);
         }
-
         if (!PermName.isWriteable(topicConfig.getPerm())) {
             response.setCode(ResponseCode.NO_PERMISSION);
             response.setRemark(String.format("the topic[%s] sending message is forbidden", newTopic));
             return CompletableFuture.completedFuture(response);
         }
+
         MessageExt msgExt = this.brokerController.getMessageStore().lookMessageByOffset(requestHeader.getOffset());
         if (null == msgExt) {
             response.setCode(ResponseCode.SYSTEM_ERROR);
@@ -192,14 +186,12 @@ public class SendMessageProcessor extends AbstractSendMessageProcessor implement
             maxReconsumeTimes = requestHeader.getMaxReconsumeTimes();
         }
 
-        if (msgExt.getReconsumeTimes() >= maxReconsumeTimes 
-            || delayLevel < 0) {
+        if (msgExt.getReconsumeTimes() >= maxReconsumeTimes || delayLevel < 0) {
             newTopic = MixAll.getDLQTopic(requestHeader.getGroup());
             queueIdInt = Math.abs(this.random.nextInt() % 99999999) % DLQ_NUMS_PER_GROUP;
 
-            topicConfig = this.brokerController.getTopicConfigManager().createTopicInSendMessageBackMethod(newTopic,
-                    DLQ_NUMS_PER_GROUP,
-                    PermName.PERM_WRITE, 0);
+            topicConfig = this.brokerController.getTopicConfigManager().createTopicInSendMessageBackMethod(
+                    newTopic, DLQ_NUMS_PER_GROUP, PermName.PERM_WRITE, 0);
             if (null == topicConfig) {
                 response.setCode(ResponseCode.SYSTEM_ERROR);
                 response.setRemark("topic[" + newTopic + "] not exist");

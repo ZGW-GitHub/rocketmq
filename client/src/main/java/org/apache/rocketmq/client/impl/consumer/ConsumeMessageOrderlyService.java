@@ -266,7 +266,7 @@ public class ConsumeMessageOrderlyService implements ConsumeMessageService {
     ) {
         boolean continueConsume = true;
         long commitOffset = -1L;
-        if (context.isAutoCommit()) {
+        if (context.isAutoCommit()) { // 如果是自动提交,默认
             switch (status) {
                 case COMMIT:
                 case ROLLBACK:
@@ -275,11 +275,12 @@ public class ConsumeMessageOrderlyService implements ConsumeMessageService {
                     commitOffset = consumeRequest.getProcessQueue().commit();
                     this.getConsumerStatsManager().incConsumeOKTPS(consumerGroup, consumeRequest.getMessageQueue().getTopic(), msgs.size());
                     break;
-                case SUSPEND_CURRENT_QUEUE_A_MOMENT: // 前面的：status = messageListener.consumeMessage(Collections.unmodifiableList(msgs), context); 出现了异常
-                    // TODO zgw 顺序消费消费过程中出现了异常的处理逻辑
+                case SUSPEND_CURRENT_QUEUE_A_MOMENT: // 消息消费过程中出现了异常
                     this.getConsumerStatsManager().incConsumeFailedTPS(consumerGroup, consumeRequest.getMessageQueue().getTopic(), msgs.size());
+                    // 校验是否可以进行消费重试
                     if (checkReconsumeTimes(msgs)) {
                         consumeRequest.getProcessQueue().makeMessageToConsumeAgain(msgs);
+                        // 再次消费(重试)
                         this.submitConsumeRequestLater(consumeRequest.getProcessQueue(), consumeRequest.getMessageQueue(), context.getSuspendCurrentQueueTimeMillis());
                         continueConsume = false;
                     } else {
@@ -289,30 +290,25 @@ public class ConsumeMessageOrderlyService implements ConsumeMessageService {
                 default:
                     break;
             }
-        } else {
+        } else { // 如果不是自动提交
             switch (status) {
-                case SUCCESS:
-                    this.getConsumerStatsManager().incConsumeOKTPS(consumerGroup, consumeRequest.getMessageQueue().getTopic(), msgs.size());
-                    break;
                 case COMMIT:
                     commitOffset = consumeRequest.getProcessQueue().commit();
                     break;
                 case ROLLBACK:
                     consumeRequest.getProcessQueue().rollback();
-                    this.submitConsumeRequestLater(
-                        consumeRequest.getProcessQueue(),
-                        consumeRequest.getMessageQueue(),
-                        context.getSuspendCurrentQueueTimeMillis());
+                    this.submitConsumeRequestLater(consumeRequest.getProcessQueue(), consumeRequest.getMessageQueue(), context.getSuspendCurrentQueueTimeMillis());
                     continueConsume = false;
                     break;
-                case SUSPEND_CURRENT_QUEUE_A_MOMENT:
+                case SUCCESS:
+                    this.getConsumerStatsManager().incConsumeOKTPS(consumerGroup, consumeRequest.getMessageQueue().getTopic(), msgs.size());
+                    break;
+                case SUSPEND_CURRENT_QUEUE_A_MOMENT: // 消息消费过程中出现了异常
                     this.getConsumerStatsManager().incConsumeFailedTPS(consumerGroup, consumeRequest.getMessageQueue().getTopic(), msgs.size());
+                    
                     if (checkReconsumeTimes(msgs)) {
                         consumeRequest.getProcessQueue().makeMessageToConsumeAgain(msgs);
-                        this.submitConsumeRequestLater(
-                            consumeRequest.getProcessQueue(),
-                            consumeRequest.getMessageQueue(),
-                            context.getSuspendCurrentQueueTimeMillis());
+                        this.submitConsumeRequestLater(consumeRequest.getProcessQueue(), consumeRequest.getMessageQueue(), context.getSuspendCurrentQueueTimeMillis());
                         continueConsume = false;
                     }
                     break;
@@ -336,7 +332,7 @@ public class ConsumeMessageOrderlyService implements ConsumeMessageService {
     private int getMaxReconsumeTimes() {
         // default reconsume times: Integer.MAX_VALUE
         if (this.defaultMQPushConsumer.getMaxReconsumeTimes() == -1) {
-            return Integer.MAX_VALUE;
+            return Integer.MAX_VALUE; // 默认走这里
         } else {
             return this.defaultMQPushConsumer.getMaxReconsumeTimes();
         }
@@ -346,13 +342,15 @@ public class ConsumeMessageOrderlyService implements ConsumeMessageService {
         boolean suspend = false;
         if (msgs != null && !msgs.isEmpty()) {
             for (MessageExt msg : msgs) {
-                if (msg.getReconsumeTimes() >= getMaxReconsumeTimes()) {
+                if (msg.getReconsumeTimes() >= getMaxReconsumeTimes()) { // 默认: 0 >= Integer.MAX_VALUE
+                    // 若消息的消费重试次数大于了最大重试次数,执行下面的代码
                     MessageAccessor.setReconsumeTime(msg, String.valueOf(msg.getReconsumeTimes()));
-                    if (!sendMessageBack(msg)) {
-                        suspend = true;
+                    if (!sendMessageBack(msg)) { // 将消息发送到 Broker 的死信队列
+                        suspend = true; // 发送到 Broker 的死信队列失败,继续执行消费重试
                         msg.setReconsumeTimes(msg.getReconsumeTimes() + 1);
                     }
                 } else {
+                    // 若消息的消费重试次数不大于最大重试次数,执行下面的代码
                     suspend = true;
                     msg.setReconsumeTimes(msg.getReconsumeTimes() + 1);
                 }
