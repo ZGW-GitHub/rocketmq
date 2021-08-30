@@ -413,13 +413,13 @@ public class ConsumeMessageConcurrentlyService implements ConsumeMessageService 
             long consumeRT = System.currentTimeMillis() - beginTimestamp;
             if (null == status) {
                 if (hasException) {
-                    returnType = ConsumeReturnType.EXCEPTION;
+                    returnType = ConsumeReturnType.EXCEPTION; // 消费过程中出现异常，直接抛出了，对此官方建议返回状态：RECONSUME_LATER
                 } else {
                     returnType = ConsumeReturnType.RETURNNULL;
                 }
             } else if (consumeRT >= defaultMQPushConsumer.getConsumeTimeout() * 60 * 1000) {
                 returnType = ConsumeReturnType.TIME_OUT;
-            } else if (ConsumeConcurrentlyStatus.RECONSUME_LATER == status) {
+            } else if (ConsumeConcurrentlyStatus.RECONSUME_LATER == status) { // 返回状态为：RECONSUME_LATER（官方建议消费出现异常时应该返回该状态）
                 returnType = ConsumeReturnType.FAILED;
             } else if (ConsumeConcurrentlyStatus.CONSUME_SUCCESS == status) {
                 returnType = ConsumeReturnType.SUCCESS;

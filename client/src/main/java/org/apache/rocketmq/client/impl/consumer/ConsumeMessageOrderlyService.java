@@ -499,13 +499,13 @@ public class ConsumeMessageOrderlyService implements ConsumeMessageService {
                             long consumeRT = System.currentTimeMillis() - beginTimestamp;
                             if (null == status) {
                                 if (hasException) {
-                                    returnType = ConsumeReturnType.EXCEPTION;
+                                    returnType = ConsumeReturnType.EXCEPTION; // 消费过程中出现异常，直接抛出了，对此官方建议返回状态：SUSPEND_CURRENT_QUEUE_A_MOMENT
                                 } else {
                                     returnType = ConsumeReturnType.RETURNNULL;
                                 }
                             } else if (consumeRT >= defaultMQPushConsumer.getConsumeTimeout() * 60 * 1000) {
                                 returnType = ConsumeReturnType.TIME_OUT;
-                            } else if (ConsumeOrderlyStatus.SUSPEND_CURRENT_QUEUE_A_MOMENT == status) {
+                            } else if (ConsumeOrderlyStatus.SUSPEND_CURRENT_QUEUE_A_MOMENT == status) { // 返回状态为：SUSPEND_CURRENT_QUEUE_A_MOMENT（官方建议消费出现异常时应该返回该状态）
                                 returnType = ConsumeReturnType.FAILED;
                             } else if (ConsumeOrderlyStatus.SUCCESS == status) {
                                 returnType = ConsumeReturnType.SUCCESS;
