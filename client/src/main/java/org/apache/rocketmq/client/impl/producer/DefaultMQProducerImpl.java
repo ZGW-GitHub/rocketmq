@@ -685,10 +685,7 @@ public class DefaultMQProducerImpl implements MQProducerInner {
 
         // 根据不同情况，抛出不同异常
         String info = String.format("Send [%d] times, still failed, cost [%d]ms, Topic: %s, BrokersSent: %s",
-            times,
-            System.currentTimeMillis() - beginTimestampFirst,
-            msg.getTopic(),
-            Arrays.toString(brokersSent));
+            times, System.currentTimeMillis() - beginTimestampFirst, msg.getTopic(), Arrays.toString(brokersSent));
 
         info += FAQUrl.suggestTodo(FAQUrl.SEND_MSG_FAILED);
 
@@ -880,19 +877,11 @@ public class DefaultMQProducerImpl implements MQProducerInner {
                         if (timeout < costTimeAsync) {
                             throw new RemotingTooMuchRequestException("sendKernelImpl call timeout");
                         }
+                        // 发送 Request
                         sendResult = this.mQClientFactory.getMQClientAPIImpl().sendMessage(
-                            brokerAddr,
-                            mq.getBrokerName(),
-                            tmpMessage,
-                            requestHeader,
-                            timeout - costTimeAsync,
-                            communicationMode,
-                            sendCallback,
-                            topicPublishInfo,
-                            this.mQClientFactory,
-                            this.defaultMQProducer.getRetryTimesWhenSendAsyncFailed(),
-                            context,
-                            this);
+                            brokerAddr, mq.getBrokerName(), tmpMessage, requestHeader, timeout - costTimeAsync,
+                            communicationMode, sendCallback, topicPublishInfo, this.mQClientFactory,
+                            this.defaultMQProducer.getRetryTimesWhenSendAsyncFailed(), context, this);
                         break;
                     case ONEWAY:
                     case SYNC:
@@ -1245,7 +1234,7 @@ public class DefaultMQProducerImpl implements MQProducerInner {
             throw new MQClientException("tranExecutor is null", null);
         }
 
-        // ignore DelayTimeLevel parameter
+        // ignore DelayTimeLevel parameter 忽略延迟, 即事务消息不支持定时发送
         if (msg.getDelayTimeLevel() != 0) {
             MessageAccessor.clearProperty(msg, MessageConst.PROPERTY_DELAY_TIME_LEVEL);
         }
@@ -1306,7 +1295,7 @@ public class DefaultMQProducerImpl implements MQProducerInner {
         }
 
         try {
-            // 结束事务消息
+            // 结束事务消息,发送 commit、rollBack、unKnow 到 Broker
             this.endTransaction(sendResult, localTransactionState, localException);
         } catch (Exception e) {
             log.warn("local transaction execute " + localTransactionState + ", but end broker transaction failed", e);
